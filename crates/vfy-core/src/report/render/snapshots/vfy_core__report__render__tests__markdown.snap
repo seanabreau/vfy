@@ -1,0 +1,8 @@
+---
+source: crates/vfy-core/src/report/render/tests.rs
+expression: "with_row(true, |rows| render_markdown(&ReportDisplay::all(rows), 1, true))"
+---
+| Name          |    Stmts |     Miss |   Branch |   BrPart |     Cover |   Missing |
+|-------------- | -------: | -------: | -------: | -------: | --------: | --------: |
+| pkg/module.py |        4 |        1 |        2 |        1 |     66.7% |  2-\>5, 3 |
+| **TOTAL**     |    **4** |    **1** |    **2** |    **1** | **66.7%** |           |

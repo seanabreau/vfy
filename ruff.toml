@@ -1,0 +1,77 @@
+target-version = "py312"
+line-length = 100
+src = ["python"]
+extend-exclude = ["sources"]
+
+[lint]
+select = [
+  "A",      # flake8-builtins
+  "ANN",    # flake8-annotations
+  "ASYNC",  # flake8-async
+  "B",      # flake8-bugbear
+  "BLE",    # flake8-blind-except
+  "C4",     # flake8-comprehensions
+  "C901",   # mccabe complexity
+  "DTZ",    # flake8-datetimez
+  "E",      # pycodestyle errors
+  "ERA",    # eradicate commented-out code
+  "EXE",    # flake8-executable
+  "F",      # Pyflakes
+  "FA",     # flake8-future-annotations
+  "FIX",    # unresolved lint directives
+  "FLY",    # static join-to-f-string conversions
+  "FURB",   # refurb correctness and modernization
+  "G",      # flake8-logging-format
+  "I",      # isort
+  "ICN",    # flake8-import-conventions
+  "LOG",    # flake8-logging
+  "N",      # pep8-naming
+  "PERF",   # Perflint
+  "PGH",    # pygrep-hooks
+  "PIE",    # flake8-pie
+  "PLC0415", # imports outside module scope
+  "PLE",    # Pylint errors
+  "PLW",    # Pylint warnings
+  "PT",     # flake8-pytest-style
+  "PYI",    # flake8-pyi
+  "RET",    # flake8-return
+  "RSE",    # flake8-raise
+  "RUF",    # Ruff-specific rules
+  "S602",   # subprocess calls with shell=True
+  "SIM",    # flake8-simplify
+  "T10",    # debugger calls
+  "T20",    # flake8-print
+  "TD",     # flake8-todos
+  "TID",    # flake8-tidy-imports
+  "UP",     # pyupgrade
+  "W",      # pycodestyle warnings
+  "YTT",    # flake8-2020
+]
+
+[lint.mccabe]
+max-complexity = 15
+
+[lint.per-file-ignores]
+# These modules own process-wide lifecycle state.
+"python/vfy/process_startup.py" = ["PLW0603"]
+"python/vfy/pytest_plugin.py" = ["PLW0603"]
+"python/vfy/mutation.py" = ["PLW0603"]
+# Commands, benchmarks, and tests own their requested stdout/stderr output.
+"python/vfy/cli.py" = ["T20"]
+"python/vfy/cli_coverage.py" = ["T20"]
+"python/vfy/cli_diagnostics.py" = ["T20"]
+"python/vfy/cli_explain.py" = ["T20"]
+"python/vfy/output.py" = ["T20"]
+"python/vfy/run/ci_run.py" = ["T20"]
+"python/vfy/run/engine.py" = ["T20"]
+"python/vfy/run/reports.py" = ["T20"]
+"python/vfy/run/watch.py" = ["T20"]
+"python/vfy/mutate.py" = ["T20"]
+"benchmarks/*.py" = ["T20"]
+"scripts/*.py" = ["T20"]
+"tests/**/*.py" = ["T20"]
+# Semantic inputs are evaluated by the semantic harness, not an annotation gate.
+"tests/fixtures/**/*.py" = ["ANN"]
+
+[lint.isort]
+combine-as-imports = true

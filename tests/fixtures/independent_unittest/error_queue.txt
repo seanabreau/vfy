@@ -1,0 +1,20 @@
+import unittest
+from conftest import trace
+
+
+def fail_cleanup(label):
+    trace(label)
+    raise ValueError(label)
+
+
+class QueuedErrors(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(fail_cleanup, "first-registered-cleanup-error")
+        self.addCleanup(fail_cleanup, "last-registered-cleanup-error")
+
+    def test_passes_before_errors(self):
+        trace("body-passed-before-errors")
+
+    def tearDown(self):
+        trace("tearDown-error")
+        raise RuntimeError("tearDown-error")

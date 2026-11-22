@@ -1,0 +1,26 @@
+[project]
+name = "vfy-coverage-example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["vfy>=0.0.1", "pytest>=8.2,<10", "pytest-xdist>=3.6,<4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.vfy.test]
+source = ["src"]
+
+# Build vfy from the reviewed checkout containing this example.
+[tool.uv.sources]
+vfy = { path = "../..", editable = false }

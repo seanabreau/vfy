@@ -1,0 +1,27 @@
+{
+  "rules": [
+    {
+      "disposition": "deliberately-unsupported",
+      "id": "hypothesis-late-autoload-lifecycle",
+      "match": "testing/test_helpconfig.py::test_version_verbose",
+      "minimum_matches": 1,
+      "reason": "The test loads Hypothesis's pytest plug-in after Hypothesis initializes, triggering its side-effect warning under the native lifecycle.",
+      "rejection_proof": "validation/pytest_runner/check_native_rejections.py#hypothesis-plugin"
+    },
+    {
+      "disposition": "reference/platform-skipped",
+      "id": "xdist-outer-plugin-presence",
+      "match": "testing/test_terminal.py::TestTerminalFunctional::test_verbose_reporting_xdist",
+      "minimum_matches": 1,
+      "reason": "The controlled stock and native lanes disable outer plug-in autoload, so outer xdist is absent and the case skips. Native pytest-xdist is covered separately by tests/integration/test_native_xdist.py."
+    },
+    {
+      "disposition": "parity-required",
+      "id": "core-parity-contract",
+      "match": "*",
+      "minimum_matches": 4229,
+      "reason": "The supported cases from the pinned pytest core must match stock pytest with plug-in autoload disabled."
+    }
+  ],
+  "schema_version": 1
+}

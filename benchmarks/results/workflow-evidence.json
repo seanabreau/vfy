@@ -1,0 +1,728 @@
+{
+  "runtime_tree_sha256": "fe9d2403db104e1ba33b2b110e4d233fe000c6a0f5f926432753ea260fab5afe",
+  "runtime_tree_hash_scheme": "For tracked files in crates/ and python/ and Cargo.toml, Cargo.lock, pyproject.toml and rust-toolchain.toml, sort paths by UTF-8 bytes. Feed each path, a NUL byte and the binary SHA-256 of its content to SHA-256.",
+  "wheel": "vfy-0.0.1-cp312-abi3-manylinux_2_34_aarch64.whl",
+  "wheel_sha256": "cd12f265c29ec251d807724ffd6e61d96df5f016b7585714335100d9f44be906",
+  "samples": {
+    "Packaging": {
+      "samples": [
+        {
+          "pytest-xdist": {
+            "seconds": 27.090705179,
+            "peak_process_tree_pss_bytes": 1722147840
+          },
+          "vfy": {
+            "seconds": 12.038206212999999,
+            "peak_process_tree_pss_bytes": 637204480
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 12.002478505,
+            "peak_process_tree_pss_bytes": 637932544
+          },
+          "pytest-xdist": {
+            "seconds": 22.888750344,
+            "peak_process_tree_pss_bytes": 1721204736
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.609044385,
+            "peak_process_tree_pss_bytes": 1722151936
+          },
+          "vfy": {
+            "seconds": 12.891694173,
+            "peak_process_tree_pss_bytes": 610930688
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 12.314099921999999,
+            "peak_process_tree_pss_bytes": 610995200
+          },
+          "pytest-xdist": {
+            "seconds": 22.416036261000002,
+            "peak_process_tree_pss_bytes": 1721073664
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.497197636,
+            "peak_process_tree_pss_bytes": 1720594432
+          },
+          "vfy": {
+            "seconds": 11.987857546999999,
+            "peak_process_tree_pss_bytes": 610884608
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 12.045880255,
+            "peak_process_tree_pss_bytes": 614414336
+          },
+          "pytest-xdist": {
+            "seconds": 23.242501135999998,
+            "peak_process_tree_pss_bytes": 1721088000
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.669887426000003,
+            "peak_process_tree_pss_bytes": 1720977408
+          },
+          "vfy": {
+            "seconds": 12.13151038,
+            "peak_process_tree_pss_bytes": 616799232
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 12.074959172000002,
+            "peak_process_tree_pss_bytes": 609530880
+          },
+          "pytest-xdist": {
+            "seconds": 22.809979759999997,
+            "peak_process_tree_pss_bytes": 1722012672
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.436300552000002,
+            "peak_process_tree_pss_bytes": 1721097216
+          },
+          "vfy": {
+            "seconds": 11.878376798,
+            "peak_process_tree_pss_bytes": 621123584
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 11.864773588,
+            "peak_process_tree_pss_bytes": 609409024
+          },
+          "pytest-xdist": {
+            "seconds": 22.746488636,
+            "peak_process_tree_pss_bytes": 1721124864
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.694862135,
+            "peak_process_tree_pss_bytes": 1722027008
+          },
+          "vfy": {
+            "seconds": 12.012886588999999,
+            "peak_process_tree_pss_bytes": 610676736
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 11.937978964,
+            "peak_process_tree_pss_bytes": 611030016
+          },
+          "pytest-xdist": {
+            "seconds": 22.760159343999998,
+            "peak_process_tree_pss_bytes": 1721965568
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 22.640729677,
+            "peak_process_tree_pss_bytes": 1721121792
+          },
+          "vfy": {
+            "seconds": 12.088702338,
+            "peak_process_tree_pss_bytes": 613790720
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 12.561986173,
+            "peak_process_tree_pss_bytes": 610637824
+          },
+          "pytest-xdist": {
+            "seconds": 22.64116726,
+            "peak_process_tree_pss_bytes": 1720784896
+          }
+        },
+        {
+          "pytest-xdist": {
+            "seconds": 23.037539051,
+            "peak_process_tree_pss_bytes": 1721153536
+          },
+          "vfy": {
+            "seconds": 12.500666255,
+            "peak_process_tree_pss_bytes": 615315456
+          }
+        }
+      ],
+      "confidence_intervals_for_vfy_minus_reference": {
+        "seconds": {
+          "low": -10.813791171999998,
+          "high": -10.432388714
+        },
+        "memory_mib": {
+          "low": -1059.5654296875,
+          "high": -1053.2431640625
+        }
+      },
+      "warmups_per_tool": 3,
+      "cases": 62435,
+      "os": {
+        "cpu": null,
+        "logical_cpus": 10,
+        "machine": "aarch64",
+        "memory_bytes": 8218034176,
+        "platform": "Linux-6.10.14-linuxkit-aarch64-with-glibc2.36",
+        "processor": null,
+        "python": "3.12.14",
+        "python_abi": "cpython-312-aarch64-linux-gnu",
+        "python_build": "main Sep  1 2026 14:15:30",
+        "python_debug": false,
+        "python_gil": "enabled",
+        "python_implementation": "CPython"
+      },
+      "upstream": "7b898d9f0b343ca06993157fc328d7caad51d5c2",
+      "workers": 4,
+      "harness_inputs": {
+        "benchmarks/benchmark_harness.py": "0534d8e402d2020cd2f01d8df9f691c20849117e95e5b2bbc94b668742cdd86a",
+        "benchmarks/benchmark_projects.py": "3a5872b27ea5ccf051211b4dda48852ada59b9a0f261e6ecf60bee1a5cdbcb77",
+        "benchmarks/benchmark_provenance.py": "d99ee5db51ac9e1579adddc59b39243d5575a2a8751cc9ef094d80498b38c8d5",
+        "benchmarks/project_manifest.py": "57944ee114ca5e1ba0c2820b71f14b45d57283a577517f931579b835b31ab5bc",
+        "benchmarks/rich_clock_plugin.py": "8ee63d033b0ec57516c63237c31c1c77e784a5aaaaee0a12fb8c70df5f22d6da",
+        "scripts/process_tree.py": "38790a2a8352419cdfd179bae01d7a2f73ed8e278a40eab774982705d69d49f2",
+        "scripts/pytest_execution_observations.py": "e14e36c4a76d5524f696bd3c2782e356e8ec975944ef724a73e6566b5d16e963",
+        "scripts/pytest_execution_probe.py": "f0db5ea7d28ef3ae8578e6a4ecadd5d87b5ed4a8a4b0de843c13ab7f2165046a",
+        "scripts/pytest_execution_record.py": "370343a95c962469488116229b2a6438e52c08fdf5c12584d8f4bdcdf47e7f6b",
+        "validation/pytest_runner/adoption_observations.py": "5ffd9597d5aa1c29c9a3569a8a3892be36e368f4551b11dc5d2341ed587ce8bd",
+        "validation/pytest_runner/benchmark_child_resources.py": "3175441ff134a910deec2add58712931578495d6a6acdc86306169284a9b9e35",
+        "validation/pytest_runner/benchmark_native_projects.py": "bfc88a330efb41c4b52da1c8aee9af149af457f92bf9bb933619f0bef5fe6692",
+        "validation/pytest_runner/benchmark_native_xdist.py": "3e3113649deb89dc5d860ba1ed54e37caae9b337c661b7ac97e90b35d9ad4010",
+        "validation/pytest_runner/benchmark_real_candidates.py": "436c5a3b98dd655b57374ccdfcfe318cdff4b0ab01c516d7fdb21cfe744b8aaa",
+        "validation/pytest_runner/benchmark_vfy_coverage.py": "661b9368d21d40d2d0f79bfa9a2b15623c087490760efdac2fd7d1f3c7fcfc53",
+        "validation/pytest_runner/check_native_adoption_matrix.py": "5f263ba1ffdf33d7522722bbb87644dbb7b810b1c8f84aa6ae78ed1c61ce8360",
+        "validation/pytest_runner/check_native_project.py": "d6d741a65d6883630913882cf5697485d03f6dd2ab45cf5e284ce340b518d9cb",
+        "validation/pytest_runner/check_native_xdist_adoption.py": "473e8a5289cb7d428f24931532d9e9c6540d94c12f8349165cf9dfb7b27e40be",
+        "validation/pytest_runner/native-adoption-requirements.txt": "3238ce29ff5649693d62865b900389774bac28447aceecf1ec58be1edefa7f6e",
+        "validation/pytest_runner/patches/rich-deterministic-workload.patch": "3858a72853b9950d06f0302a5c478c11a819c1b958803b0cc7034d587360a5ac"
+      }
+    },
+    "Rich": {
+      "samples": [
+        {
+          "vfy": {
+            "seconds": 0.406471292,
+            "peak_process_tree_pss_bytes": 62610432
+          },
+          "pytest-testmon": {
+            "seconds": 0.7409185,
+            "peak_process_tree_pss_bytes": 47235072
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.756885,
+            "peak_process_tree_pss_bytes": 47378432
+          },
+          "vfy": {
+            "seconds": 0.382274667,
+            "peak_process_tree_pss_bytes": 62901248
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.380191208,
+            "peak_process_tree_pss_bytes": 62786560
+          },
+          "pytest-testmon": {
+            "seconds": 0.733127875,
+            "peak_process_tree_pss_bytes": 47980544
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.734574167,
+            "peak_process_tree_pss_bytes": 47362048
+          },
+          "vfy": {
+            "seconds": 0.373433542,
+            "peak_process_tree_pss_bytes": 63041536
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.375948751,
+            "peak_process_tree_pss_bytes": 62491648
+          },
+          "pytest-testmon": {
+            "seconds": 0.758928042,
+            "peak_process_tree_pss_bytes": 46886912
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.7251800429999999,
+            "peak_process_tree_pss_bytes": 47269888
+          },
+          "vfy": {
+            "seconds": 0.394387792,
+            "peak_process_tree_pss_bytes": 62827520
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.373200458,
+            "peak_process_tree_pss_bytes": 62958592
+          },
+          "pytest-testmon": {
+            "seconds": 0.721847209,
+            "peak_process_tree_pss_bytes": 46952448
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.74037825,
+            "peak_process_tree_pss_bytes": 46903296
+          },
+          "vfy": {
+            "seconds": 0.385311083,
+            "peak_process_tree_pss_bytes": 62802944
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.38137987500000003,
+            "peak_process_tree_pss_bytes": 63151104
+          },
+          "pytest-testmon": {
+            "seconds": 0.7221329590000001,
+            "peak_process_tree_pss_bytes": 46997504
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.767039417,
+            "peak_process_tree_pss_bytes": 47050752
+          },
+          "vfy": {
+            "seconds": 0.417588291,
+            "peak_process_tree_pss_bytes": 63289344
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.376870376,
+            "peak_process_tree_pss_bytes": 62935040
+          },
+          "pytest-testmon": {
+            "seconds": 0.736562083,
+            "peak_process_tree_pss_bytes": 46841856
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.729070208,
+            "peak_process_tree_pss_bytes": 47944704
+          },
+          "vfy": {
+            "seconds": 0.408341084,
+            "peak_process_tree_pss_bytes": 62799872
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.39353333300000004,
+            "peak_process_tree_pss_bytes": 62966784
+          },
+          "pytest-testmon": {
+            "seconds": 0.726425542,
+            "peak_process_tree_pss_bytes": 47269888
+          }
+        },
+        {
+          "pytest-testmon": {
+            "seconds": 0.728525375,
+            "peak_process_tree_pss_bytes": 46858240
+          },
+          "vfy": {
+            "seconds": 0.39247833400000004,
+            "peak_process_tree_pss_bytes": 62200832
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 0.419594542,
+            "peak_process_tree_pss_bytes": 62883840
+          },
+          "pytest-testmon": {
+            "seconds": 0.7330874169999999,
+            "peak_process_tree_pss_bytes": 46821376
+          }
+        }
+      ],
+      "confidence_intervals_for_vfy_minus_reference": {
+        "seconds": {
+          "low": -0.358103583,
+          "high": -0.33289220899999994
+        },
+        "memory_mib": {
+          "low": 14.810546875,
+          "high": 15.255859375
+        }
+      },
+      "warmups_per_tool": 3,
+      "revision": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "engine": "pytest-native",
+      "edit": {
+        "after": "return \"<emoji \" + repr(self.name) + \">\"",
+        "before": "return f\"<emoji {self.name!r}>\"",
+        "path": "rich/emoji.py",
+        "upstream_sha256": "cfb001bb4ffad5624f58e33f7718541cd680d01e9142e657deb7a58ecd62584f"
+      },
+      "workers": 1,
+      "testmon_version": "2.2.0",
+      "versions": {
+        "coverage": "7.16.2",
+        "pytest": "9.1.1",
+        "pytest-cov": "7.1.0",
+        "pytest-testmon": "2.2.0",
+        "vfy": "0.0.1"
+      },
+      "full_cases": 981,
+      "vfy_selected": 1,
+      "testmon_selected": 1,
+      "per_test_contexts": "differs",
+      "required_test": "tests/test_emoji.py::test_str_repr",
+      "aggregate_schema7": "exact",
+      "coverage_json": "exact",
+      "baseline_per_test_contexts": "exact",
+      "selection_relation": "exact",
+      "dependency_lock_sha256": "4ab4e035f1c4d4b076de77104d0855f63bf8fbf253f289b68d69c4930542ddad"
+    },
+    "flake8-simplify": {
+      "samples": [
+        {
+          "mutmut": {
+            "seconds": 29.842993347,
+            "peak_process_tree_pss_bytes": 143991808
+          },
+          "vfy": {
+            "seconds": 1.5908681249999999,
+            "peak_process_tree_pss_bytes": 72701952
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.597492417,
+            "peak_process_tree_pss_bytes": 72694784
+          },
+          "mutmut": {
+            "seconds": 29.207425971,
+            "peak_process_tree_pss_bytes": 143582208
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.754669305,
+            "peak_process_tree_pss_bytes": 145044480
+          },
+          "vfy": {
+            "seconds": 1.592291626,
+            "peak_process_tree_pss_bytes": 72718336
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.6604199590000002,
+            "peak_process_tree_pss_bytes": 72693760
+          },
+          "mutmut": {
+            "seconds": 28.993815305000002,
+            "peak_process_tree_pss_bytes": 145675264
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.663985388,
+            "peak_process_tree_pss_bytes": 143053824
+          },
+          "vfy": {
+            "seconds": 1.674645876,
+            "peak_process_tree_pss_bytes": 72706048
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.605597584,
+            "peak_process_tree_pss_bytes": 72710144
+          },
+          "mutmut": {
+            "seconds": 28.066917179,
+            "peak_process_tree_pss_bytes": 145597440
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 27.961484929999997,
+            "peak_process_tree_pss_bytes": 143019008
+          },
+          "vfy": {
+            "seconds": 1.553421834,
+            "peak_process_tree_pss_bytes": 72718336
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.6083629590000001,
+            "peak_process_tree_pss_bytes": 72706048
+          },
+          "mutmut": {
+            "seconds": 28.589983763,
+            "peak_process_tree_pss_bytes": 143930368
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 29.260452513,
+            "peak_process_tree_pss_bytes": 146039808
+          },
+          "vfy": {
+            "seconds": 1.650577043,
+            "peak_process_tree_pss_bytes": 71963648
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.5813462090000001,
+            "peak_process_tree_pss_bytes": 72722432
+          },
+          "mutmut": {
+            "seconds": 28.751746054999998,
+            "peak_process_tree_pss_bytes": 144634880
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.508517512999997,
+            "peak_process_tree_pss_bytes": 145042432
+          },
+          "vfy": {
+            "seconds": 1.592451375,
+            "peak_process_tree_pss_bytes": 72709120
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.601512709,
+            "peak_process_tree_pss_bytes": 72697856
+          },
+          "mutmut": {
+            "seconds": 28.536924388,
+            "peak_process_tree_pss_bytes": 141997056
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.977341597,
+            "peak_process_tree_pss_bytes": 145753088
+          },
+          "vfy": {
+            "seconds": 1.5967879170000001,
+            "peak_process_tree_pss_bytes": 71995392
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.6427490009999999,
+            "peak_process_tree_pss_bytes": 72006656
+          },
+          "mutmut": {
+            "seconds": 28.20202168,
+            "peak_process_tree_pss_bytes": 142496768
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 29.069745846,
+            "peak_process_tree_pss_bytes": 145359872
+          },
+          "vfy": {
+            "seconds": 1.579314501,
+            "peak_process_tree_pss_bytes": 72718336
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.605365084,
+            "peak_process_tree_pss_bytes": 72706048
+          },
+          "mutmut": {
+            "seconds": 28.861767347,
+            "peak_process_tree_pss_bytes": 144684032
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.341201388,
+            "peak_process_tree_pss_bytes": 146912256
+          },
+          "vfy": {
+            "seconds": 1.624139167,
+            "peak_process_tree_pss_bytes": 72710144
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.569933459,
+            "peak_process_tree_pss_bytes": 72707072
+          },
+          "mutmut": {
+            "seconds": 28.429061888,
+            "peak_process_tree_pss_bytes": 143805440
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.478363221,
+            "peak_process_tree_pss_bytes": 144794624
+          },
+          "vfy": {
+            "seconds": 1.614673835,
+            "peak_process_tree_pss_bytes": 71964672
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.590457542,
+            "peak_process_tree_pss_bytes": 72741888
+          },
+          "mutmut": {
+            "seconds": 28.539376513,
+            "peak_process_tree_pss_bytes": 143632384
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 28.876972596999998,
+            "peak_process_tree_pss_bytes": 144815104
+          },
+          "vfy": {
+            "seconds": 1.6050887090000001,
+            "peak_process_tree_pss_bytes": 71959552
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.6030856679999999,
+            "peak_process_tree_pss_bytes": 72722432
+          },
+          "mutmut": {
+            "seconds": 27.414755137,
+            "peak_process_tree_pss_bytes": 144594944
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 25.238500678,
+            "peak_process_tree_pss_bytes": 146763776
+          },
+          "vfy": {
+            "seconds": 1.363705792,
+            "peak_process_tree_pss_bytes": 72706048
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.280915668,
+            "peak_process_tree_pss_bytes": 72710144
+          },
+          "mutmut": {
+            "seconds": 24.436029969,
+            "peak_process_tree_pss_bytes": 145040384
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 24.668641594,
+            "peak_process_tree_pss_bytes": 146150400
+          },
+          "vfy": {
+            "seconds": 1.329458709,
+            "peak_process_tree_pss_bytes": 72706048
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.31078875,
+            "peak_process_tree_pss_bytes": 72701952
+          },
+          "mutmut": {
+            "seconds": 24.394031928,
+            "peak_process_tree_pss_bytes": 144286720
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 24.117628929,
+            "peak_process_tree_pss_bytes": 145044480
+          },
+          "vfy": {
+            "seconds": 1.293024751,
+            "peak_process_tree_pss_bytes": 72717312
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.264944626,
+            "peak_process_tree_pss_bytes": 72667136
+          },
+          "mutmut": {
+            "seconds": 24.772531511,
+            "peak_process_tree_pss_bytes": 146129920
+          }
+        },
+        {
+          "mutmut": {
+            "seconds": 24.634271677,
+            "peak_process_tree_pss_bytes": 144061440
+          },
+          "vfy": {
+            "seconds": 1.341644125,
+            "peak_process_tree_pss_bytes": 72714240
+          }
+        },
+        {
+          "vfy": {
+            "seconds": 1.3015563749999999,
+            "peak_process_tree_pss_bytes": 72730624
+          },
+          "mutmut": {
+            "seconds": 24.785576053,
+            "peak_process_tree_pss_bytes": 141804544
+          }
+        }
+      ],
+      "confidence_intervals_for_vfy_minus_reference": {
+        "seconds": {
+          "low": -27.111077804499995,
+          "high": -26.422621179000004
+        },
+        "memory_mib": {
+          "low": -68.9873046875,
+          "high": -68.0141357421875
+        }
+      },
+      "warmups_per_tool": 3,
+      "revision": "d02de77a453dfcb81b67a0239d76fa1be610e658",
+      "mutmut_revision": "41353df71526c8309e77521b9342a539dd434479",
+      "catalog": {
+        "common": 69,
+        "mutmut": 419,
+        "vfy": 699
+      },
+      "lock_sha256": "d3c666e8aca02bee17f5f507d3dd68e4a664a1ae3f75bc2931356e5e28358604",
+      "workers": 1
+    }
+  }
+}

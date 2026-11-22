@@ -1,0 +1,25 @@
+---
+source: src/report/render/tests.rs
+expression: "with_row(true, |rows|\n{\n    render_html(rows,\n    \"Demo <report>\").expect(\"HTML report\").into_iter().map(|(name, content)|\n    format!(\"--- {name}\\n{content}\")).collect::<Vec<_>>().join(\"\\n\")\n})"
+---
+--- style.css
+:root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+body { margin: 2rem auto; max-width: 90rem; padding: 0 1rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid #8885; padding: .45rem .6rem; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+pre { line-height: 1.45; overflow-x: auto; }
+.covered { background: #2d8a4e22; }
+.missing { background: #d13c3c28; }
+.excluded { color: #888; }
+.number { color: #888; display: inline-block; text-align: right; width: 4rem; margin-right: 1rem; }
+
+--- z_6ae6ba2c0b8bca91.html
+<!doctype html><html><head><meta charset="utf-8"><title>pkg/module.py — Demo &lt;report&gt;</title><link rel="stylesheet" href="style.css"></head><body><p><a href="index.html">Index</a></p><h1>pkg/module.py</h1><p>66.7% covered</p><pre><span class="covered"><span class="number">1</span>covered</span>
+<span class="covered"><span class="number">2</span>missing</span>
+<span class="missing"><span class="number">3</span>branch</span>
+<span class="excluded"><span class="number">4</span>excluded</span>
+<span class="covered"><span class="number">5</span>covered</span></pre></body></html>
+
+--- index.html
+<!doctype html><html><head><meta charset="utf-8"><title>Demo &lt;report&gt;</title><link rel="stylesheet" href="style.css"></head><body><h1>Demo &lt;report&gt;</h1><p>Total coverage: 66.7%</p><table><thead><tr><th>File</th><th>Statements</th><th>Missing</th><th>Branches</th><th>Coverage</th></tr></thead><tbody><tr><td><a href="z_6ae6ba2c0b8bca91.html">pkg/module.py</a></td><td>4</td><td>1</td><td>2</td><td>66.7%</td></tr></tbody></table></body></html>

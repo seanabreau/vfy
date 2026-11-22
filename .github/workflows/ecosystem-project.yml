@@ -1,0 +1,123 @@
+name: Pinned ecosystem project
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      python:
+        required: true
+        type: string
+      parity_policy:
+        required: false
+        type: string
+        default: required
+      expected_pattern:
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: ecosystem-project-${{ inputs.project }}-py${{ inputs.python }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    name: ${{ inputs.project }} Python ${{ inputs.python }} ${{ inputs.parity_policy }} parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ inputs.python }}
+          version: "0.12.7"
+          enable-cache: true
+      - name: Install vfy and the locked reference tools
+        run: |
+          uv sync --locked --group dev --group benchmark
+      - name: Prepare the pinned project and release artifact
+        env:
+          PROJECT: ${{ inputs.project }}
+          PYTHON: ${{ inputs.python }}
+        run: |
+          PREPARED="$RUNNER_TEMP/vfy-ecosystem/$PROJECT/py$PYTHON"
+          mkdir -p "$PREPARED"
+          uv run --no-sync python -m benchmarks prepare projects "$PROJECT" "$PREPARED" \
+            --metadata "$PREPARED/artifacts" \
+            --vfy-root "$GITHUB_WORKSPACE"
+      - name: Compare the real project suite without timing
+        if: inputs.parity_policy == 'required'
+        env:
+          PROJECT: ${{ inputs.project }}
+          PYTHON: ${{ inputs.python }}
+        run: |
+          PREPARED="$RUNNER_TEMP/vfy-ecosystem/$PROJECT/py$PYTHON"
+          uv run --no-sync python -m benchmarks validate projects \
+            --project "$PROJECT" \
+            --root "$PREPARED/project" \
+            --python "$PREPARED/environment/bin/python" \
+            --preparation-manifest "$PREPARED/artifacts/manifest.json" \
+            --artifacts "$PREPARED/artifacts/projects" \
+            --mode diagnostic
+      - name: Retain the known interpreter compatibility rejection
+        if: inputs.parity_policy == 'diagnostic'
+        env:
+          PROJECT: ${{ inputs.project }}
+          PYTHON: ${{ inputs.python }}
+          EXPECTED_PATTERN: ${{ inputs.expected_pattern }}
+        run: |
+          PREPARED="$RUNNER_TEMP/vfy-ecosystem/$PROJECT/py$PYTHON"
+          mkdir -p "$PREPARED/artifacts/projects"
+          set +e
+          uv run --no-sync python -m benchmarks validate projects \
+            --project "$PROJECT" \
+            --root "$PREPARED/project" \
+            --python "$PREPARED/environment/bin/python" \
+            --preparation-manifest "$PREPARED/artifacts/manifest.json" \
+            --artifacts "$PREPARED/artifacts/projects" \
+            --mode diagnostic \
+            > "$PREPARED/artifacts/projects/validation.log" 2>&1
+          STATUS=$?
+          set -e
+          cat "$PREPARED/artifacts/projects/validation.log"
+          if [ "$STATUS" -eq 0 ]; then
+            echo "expected a documented parity rejection, but validation passed"
+            exit 1
+          fi
+          if [ -z "$EXPECTED_PATTERN" ] || ! grep -Eiq "$EXPECTED_PATTERN" \
+            "$PREPARED/artifacts/projects/validation.log"; then
+            echo "diagnostic lane failed for an unrecognized reason"
+            exit 1
+          fi
+          printf '{"status":"expected_rejection","exit_code":%s,"reason":"%s"}\n' "$STATUS" "$EXPECTED_PATTERN" \
+            > "$PREPARED/artifacts/projects/expected-rejection.json"
+      - name: Validate the stateful edit workflow protocol
+        if: inputs.parity_policy == 'required' && (inputs.project == 'rich' || inputs.project == 'datasette')
+        env:
+          PROJECT: ${{ inputs.project }}
+          PYTHON: ${{ inputs.python }}
+        run: |
+          PREPARED="$RUNNER_TEMP/vfy-ecosystem/$PROJECT/py$PYTHON"
+          uv run --no-sync python -m benchmarks validate workflows \
+            --project "$PROJECT" \
+            --root "$PREPARED/project" \
+            --python "$PREPARED/environment/bin/python" \
+            --preparation-manifest "$PREPARED/artifacts/manifest.json" \
+            --artifacts "$PREPARED/artifacts/workflows" \
+            --mode diagnostic
+      - name: Retain reports, databases, logs and semantic differences
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ecosystem-${{ inputs.project }}-py${{ inputs.python }}
+          path: ${{ runner.temp }}/vfy-ecosystem/${{ inputs.project }}/py${{ inputs.python }}/artifacts/
+          include-hidden-files: true
+          if-no-files-found: error

@@ -1,0 +1,63 @@
+import unittest
+from conftest import trace
+
+
+def broken(label):
+    trace(label)
+    raise ValueError(label)
+
+
+class SetupFailure(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(trace, "setup-failure-cleanup")
+        broken("setUp-failure")
+
+    def tearDown(self):
+        trace("must-not-tearDown-after-failed-setUp")
+
+    def test_body(self):
+        trace("must-not-test-after-failed-setUp")
+
+
+class BodyAndTeardownFailure(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(broken, "cleanup-failure")
+        self.addCleanup(trace, "cleanup-before-failure")
+
+    def test_body(self):
+        trace("body-failure")
+        self.fail("body-failure")
+
+    def tearDown(self):
+        broken("tearDown-failure")
+
+
+class ClassSetupFailure(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.addClassCleanup(trace, "failed-class-setup-cleanup")
+        broken("setUpClass-failure")
+
+    @classmethod
+    def tearDownClass(cls):
+        trace("must-not-tearDownClass-after-failed-setup")
+
+    def test_a(self):
+        trace("must-not-class-test")
+
+    def test_b(self):
+        trace("must-not-class-test")
+
+
+class ClassTeardownFailure(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.addClassCleanup(broken, "class-cleanup-first-failure")
+        cls.addClassCleanup(broken, "class-cleanup-last-failure")
+
+    @classmethod
+    def tearDownClass(cls):
+        broken("tearDownClass-failure")
+
+    def test_body(self):
+        trace("class-teardown-test")

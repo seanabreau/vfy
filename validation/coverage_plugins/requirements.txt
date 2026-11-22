@@ -1,0 +1,12 @@
+asgiref==3.12.1
+coverage==7.15.4
+coverage-conditional-plugin==0.9.0
+django==6.1.2
+django-coverage-plugin==3.2.2
+iniconfig==2.3.1
+kodo-plugins-cover-test-context==0.1
+packaging==26.3
+pluggy==1.6.0
+pygments==2.21.0
+pytest==9.1.1
+sqlparse==0.6.0

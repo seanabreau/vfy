@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="625" viewBox="0 0 600 625" role="img" aria-labelledby="title desc">
+<title id="title">Mutation-testing paths</title>
+<desc id="desc">A mutation catalog leads to a safe collected-session swap decision. The yes route forks the collected session; the no route patches the import in a child. Both run tests, producing a mutation result that is written to the mutation cache.</desc>
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--wire)"/></marker>
+  <marker id="arrow-hot" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--accent)"/></marker>
+</defs>
+<style>:root{--ink:#26242c;--muted:#555c65;--rule:#c6c8ca;--surface:#f7f7f4;--wire:#7f848b;--core:#2b2030;--core-text:#f8f5f1;--accent:#e85d04}
+
+.plate{fill:var(--surface)}
+.slab{fill:var(--core)}
+.gate{fill:var(--surface);stroke:var(--accent);stroke-width:1.6}
+.region-rule{stroke:var(--core-text);stroke-width:1;opacity:.32}
+.ink{fill:var(--ink)}.muted{fill:var(--muted)}.on-slab{fill:var(--core-text)}
+.orange{fill:var(--accent)}
+.wire{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-linecap:round}
+.hot{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round}
+.python{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-dasharray:5 5;stroke-linecap:round}
+.label{font:600 23px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.sub{font:400 18px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.small{font:600 17px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.code{font:600 25px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+.code-small{font:600 22px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+</style>
+
+<!-- The fork and portable import routes are parallel alternatives, not sequential work. -->
+<path class="wire" d="M300 83 L300 111" marker-end="url(#arrow)"/>
+<path class="wire" d="M235 195 C235 220 150 212 150 229" marker-end="url(#arrow)"/>
+<path class="python" d="M365 195 C365 220 450 212 450 229" marker-end="url(#arrow)"/>
+<path class="wire" d="M150 309 C150 335 245 330 245 344" marker-end="url(#arrow)"/>
+<path class="python" d="M450 309 C450 335 355 330 355 344" marker-end="url(#arrow)"/>
+<path class="hot" d="M300 426 L300 455" marker-end="url(#arrow-hot)"/>
+<path class="hot" d="M300 521 L300 546" marker-end="url(#arrow-hot)"/>
+
+<rect class="plate" x="160" y="18" width="280" height="60" rx="5"/>
+<text class="label ink" x="178" y="54">Mutation catalog</text>
+
+<rect class="gate" x="160" y="122" width="280" height="68" rx="6"/>
+<text class="label ink" x="178" y="151">Safe collected-session</text>
+<text class="label ink" x="178" y="176">swap?</text>
+<text class="small muted" x="95" y="222" text-anchor="middle">yes</text>
+<text class="small muted" x="505" y="222" text-anchor="middle">no</text>
+
+<rect class="plate" x="20" y="240" width="260" height="64" rx="5"/>
+<text class="label ink" x="36" y="268">Fork session</text>
+<text class="sub muted" x="36" y="291">collected state</text>
+<rect class="plate" x="320" y="240" width="260" height="64" rx="5"/>
+<text class="label ink" x="336" y="268">Patch import</text>
+<text class="sub muted" x="336" y="291">in child process</text>
+
+<rect class="slab" x="160" y="355" width="280" height="66" rx="6"/>
+<text class="label on-slab" x="179" y="393">Run tests</text>
+<rect class="plate" x="160" y="466" width="280" height="50" rx="5"/>
+<text class="label ink" x="178" y="498">Mutation result</text>
+<rect class="plate" x="160" y="557" width="280" height="50" rx="5"/>
+<text class="label ink" x="178" y="589">Mutation cache</text>
+
+</svg>

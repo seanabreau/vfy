@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">vfy</title>
+  <desc id="desc">A copper track switch with a continuous route and a shorter parallel branch, representing selective test reruns.</desc>
+  <g fill="#e85d04" transform="scale(2)">
+    <path d="M8 76h36l40-40h36v16H92L52 92H8Z"/>
+    <path d="m60 100 24-24h24v16H92l-8 8Z"/>
+  </g>
+</svg>

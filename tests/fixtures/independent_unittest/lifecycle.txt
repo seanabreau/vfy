@@ -1,0 +1,51 @@
+import unittest
+import pytest
+from conftest import trace
+
+
+class LifecycleCase(unittest.TestCase):
+    @classmethod
+    def setup_class(cls):
+        trace("setup_class")
+
+    @classmethod
+    def teardown_class(cls):
+        trace("teardown_class")
+
+    @classmethod
+    def setUpClass(cls):
+        trace("setUpClass")
+        cls.addClassCleanup(trace, "class-cleanup-first")
+        cls.addClassCleanup(trace, "class-cleanup-last")
+
+    @classmethod
+    def tearDownClass(cls):
+        trace("tearDownClass")
+
+    def setup_method(self, method):
+        trace("setup_method", method=method.__name__)
+
+    def teardown_method(self, method):
+        trace("teardown_method", method=method.__name__)
+
+    @pytest.fixture(autouse=True)
+    def resource(self, request):
+        trace("fixture-setup", same_instance=request.instance is self)
+        yield
+        trace("fixture-teardown", same_instance=request.instance is self)
+
+    def setUp(self):
+        assert not hasattr(self, "touched")
+        self.touched = True
+        trace("setUp", method=self._testMethodName)
+        self.addCleanup(trace, "cleanup-first", method=self._testMethodName)
+        self.addCleanup(trace, "cleanup-last", method=self._testMethodName)
+
+    def tearDown(self):
+        trace("tearDown", method=self._testMethodName)
+
+    def test_b(self):
+        trace("test", method=self._testMethodName)
+
+    def test_a(self):
+        trace("test", method=self._testMethodName)

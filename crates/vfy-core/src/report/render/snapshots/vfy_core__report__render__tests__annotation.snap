@@ -1,0 +1,9 @@
+---
+source: src/report/render/tests.rs
+expression: "with_row(true, |mut rows|\nrender_annotation(rows.remove(0), None).expect(\"annotation report\"))"
+---
+> covered
+> missing
+! branch
+- excluded
+> covered

@@ -1,0 +1,24 @@
+{
+  "mode": "publication",
+  "methodology": {
+    "mode": "publication",
+    "warmups": 3,
+    "measured_runs": 15,
+    "sampling": {
+      "warmups": 3,
+      "measured_runs": 15
+    },
+    "phases": [
+      "serial"
+    ],
+    "coverage_context": "test",
+    "reports": [
+      "term",
+      "json"
+    ]
+  },
+  "parity": "exact",
+  "project": "platformdirs",
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "vfy_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

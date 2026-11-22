@@ -1,0 +1,24 @@
+import unittest
+from conftest import trace
+
+
+class AsyncCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        trace("async-sync-setUp")
+        self.addCleanup(trace, "async-sync-cleanup")
+
+    async def asyncSetUp(self):
+        trace("asyncSetUp")
+        self.addAsyncCleanup(self.clean_async)
+
+    async def clean_async(self):
+        trace("async-cleanup")
+
+    async def test_async(self):
+        trace("async-body")
+
+    async def asyncTearDown(self):
+        trace("asyncTearDown")
+
+    def tearDown(self):
+        trace("async-sync-tearDown")

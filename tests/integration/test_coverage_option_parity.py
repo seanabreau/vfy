@@ -1,0 +1,187 @@
+"""Compare ``Coverage.get_option`` and deferred source checks with Coverage.py."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from tests.support import VfyProject
+
+_PLUGIN = (
+    "import coverage\n"
+    "class Plugin(coverage.CoveragePlugin):\n"
+    "    pass\n"
+    "def coverage_init(reg, options):\n"
+    "    reg.add_noop(Plugin())\n"
+)
+
+_READ_OPTIONS = (
+    "import json, sys\n"
+    "import importlib\n"
+    "module = importlib.import_module(sys.argv[1])\n"
+    "cov = module.Coverage(config_file='.coveragerc')\n"
+    "seen = {}\n"
+    "for name in sys.argv[2:]:\n"
+    "    try:\n"
+    "        seen[name] = cov.get_option(name)\n"
+    "    except Exception as error:\n"
+    "        seen[name] = [type(error).__name__, str(error)]\n"
+    "print(json.dumps(seen, sort_keys=True))\n"
+)
+
+_OPTIONS = (
+    "paths",
+    "paths:source",
+    "myplug:answer",
+    "myplug:missing",
+    "run:plugins",
+    "run:data_file",
+    "run:source",
+    "run:source_pkgs",
+    "run:parallel",
+    "run:relative_files",
+    "run:sigterm",
+    "run:concurrency",
+    "run:disable_warnings",
+    "report:fail_under",
+    "report:format",
+    "run:context",
+    "unknown:option",
+)
+
+
+@pytest.mark.parametrize("data_file_source", ["config", "environment"])
+@pytest.mark.parametrize("configured", [True, False])
+def test_get_option_matches_coverage_py(
+    tmp_path: Path, configured: bool, data_file_source: str
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("myplug.py", _PLUGIN)
+    project.write("read.py", _READ_OPTIONS)
+    run = (
+        "[run]\nplugins = myplug\nparallel = true\nsigterm = true\n"
+        "disable_warnings = no-data-collected\n"
+    )
+    if configured:
+        run += "source_pkgs = alpha\nsource = src\nconcurrency = thread\ncontext = ctx\n"
+        if data_file_source == "config":
+            run += "data_file = sub/.cov\n"
+    project.write(
+        ".coveragerc",
+        run
+        + "[report]\nfail_under = 97.5\n"
+        + "[paths]\nsource =\n    src\n    /elsewhere/src\nother =\n    one\n    two\n"
+        + "[myplug]\nanswer = 42\n",
+    )
+    env = {"COVERAGE_FILE": "env/.cov"} if data_file_source == "environment" else None
+
+    expected = project.run_python("read.py", "coverage", *_OPTIONS, env=env)
+    actual = project.run_python("read.py", "vfy", *_OPTIONS, env=env)
+
+    assert expected.returncode == actual.returncode == 0, expected.stderr + actual.stderr
+    reference = json.loads(expected.stdout)
+    observed = json.loads(actual.stdout)
+    # Coverage.py raises its own ConfigError; vfy raises vfy.errors.ConfigError.
+    assert (
+        observed["unknown:option"]
+        == reference["unknown:option"]
+        == [
+            "ConfigError",
+            "No such option: 'unknown:option'",
+        ]
+    )
+    assert observed == reference
+
+
+@pytest.mark.parametrize("explicit", [None, "named.cov"])
+def test_run_data_file_option_is_the_configured_name(tmp_path: Path, explicit: str | None) -> None:
+    project = VfyProject(tmp_path)
+    project.write(".coveragerc", "[run]\ndata_file = configured/.cov\n")
+    project.write(
+        "read.py",
+        "import importlib, sys\n"
+        "module = importlib.import_module(sys.argv[1])\n"
+        f"cov = module.Coverage(data_file={explicit!r}, config_file='.coveragerc')\n"
+        "print(cov.get_option('run:data_file'))\n",
+    )
+
+    expected = project.run_python("read.py", "coverage")
+    actual = project.run_python("read.py", "vfy")
+
+    assert (actual.returncode, actual.stdout, actual.stderr) == (
+        expected.returncode,
+        expected.stdout,
+        expected.stderr,
+    )
+    assert actual.stdout.strip() == (explicit or "configured/.cov")
+
+
+_DEFERRED = (
+    "import importlib, sys, warnings\n"
+    "module = importlib.import_module(sys.argv[1])\n"
+    "with warnings.catch_warnings(record=True) as caught:\n"
+    "    warnings.simplefilter('always')\n"
+    "    cov = module.Coverage(\n"
+    "        source_pkgs=['absent_package'], config_file=False, data_file=None)\n"
+    "    print('constructed')\n"
+    "    cov.start()\n"
+    "    import target\n"
+    "    cov.stop()\n"
+    "    try:\n"
+    "        cov.report(file=sys.stdout)\n"
+    "    except Exception as error:\n"
+    "        print(type(error).__name__, error)\n"
+    "for item in caught:\n"
+    "    message = str(item.message)\n"
+    "    print(item.category.__name__, message[: message.index(' (')])\n"
+    "    print(message[message.index('(') : message.index(')') + 1])\n"
+)
+
+
+def test_unimportable_source_package_is_deferred_like_coverage_py(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write("target.py", "value = 1\n")
+    project.write("run.py", _DEFERRED)
+
+    expected = project.run_python("run.py", "coverage")
+    actual = project.run_python("run.py", "vfy")
+
+    assert expected.returncode == actual.returncode == 0, expected.stderr + actual.stderr
+    assert not (tmp_path / ".coverage").exists()
+    assert actual.stdout == expected.stdout
+    assert "constructed" in actual.stdout
+    assert "NoDataError No data to report." in actual.stdout
+    assert "module-not-imported" in actual.stdout
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        "[run]\nomit = b.py\n",
+        "[report]\nomit = b.py\n",
+        "[run]\nomit = a.py\n[report]\nomit = b.py\n",
+    ],
+)
+def test_report_omit_comes_from_the_report_section_like_coverage_py(
+    tmp_path: Path, configuration: str
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write(".coveragerc", configuration)
+    first = project.write("a.py", "x = 1\ny = 2\n")
+    second = project.write("b.py", "x = 1\n")
+    project.write(
+        "seed.py",
+        "import sys\n"
+        "from coverage import CoverageData\n"
+        "data = CoverageData(basename='.coverage')\n"
+        "data.add_lines({sys.argv[1]: [1], sys.argv[2]: [1]})\n"
+        "data.write()\n",
+    )
+    project.run_python("seed.py", str(first), str(second)).expect(0)
+
+    expected = project.run_coverage_py("report")
+    actual = project.run_vfy("coverage", "report")
+
+    assert (actual.returncode, actual.stdout) == (expected.returncode, expected.stdout)

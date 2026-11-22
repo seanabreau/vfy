@@ -1,0 +1,5 @@
+---
+source: src/report/render/tests.rs
+expression: "with_row(true, |rows| render_total(rows, 1))"
+---
+66.7

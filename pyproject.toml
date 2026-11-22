@@ -1,0 +1,117 @@
+[build-system]
+requires = ["maturin>=1.14,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vfy"
+dynamic = ["version"]
+description = "A Python test runner and coverage tool, built in Rust"
+readme = "README.pypi.md"
+requires-python = ">=3.12"
+license = "Apache-2.0 OR MIT"
+license-files = ["LICENSE-APACHE", "LICENSE-MIT", "NOTICE"]
+authors = [{ name = "Sean Abreau" }]
+keywords = ["code coverage", "coverage.py", "pytest", "pytest-cov", "rust", "testing"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Rust",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = []
+
+[project.optional-dependencies]
+pytest = [
+  "pluggy>=1.5,<2",
+  "pytest>=9.1",
+]
+
+[project.urls]
+Documentation = "https://vfy.neocline.com/"
+Repository = "https://github.com/seanabreau/vfy"
+Issues = "https://github.com/seanabreau/vfy/issues"
+Changelog = "https://github.com/seanabreau/vfy/blob/main/changelogs/0.0.x.md"
+
+[project.scripts]
+vfy = "vfy.entry:main"
+
+[tool.maturin]
+bindings = "pyo3"
+manifest-path = "crates/vfy/Cargo.toml"
+module-name = "vfy._native"
+python-source = "python"
+strip = true
+include = [{ path = "rust-toolchain.toml", format = "sdist" }]
+features = ["extension-module"]
+exclude = [
+  ".pytest_cache/**",
+  ".venv/**",
+  "dist/**",
+  "python/vfy/__pycache__/**",
+  "python/vfy/**/*.pyc",
+  "target/**",
+]
+
+[dependency-groups]
+benchmark = [
+  "tomlkit>=0.15,<0.16",
+  "pytest-cov>=7.1,<8",
+  "pytest-testmon>=2.2,<3",
+  "slipcover>=1.0.18,<2; python_version < '3.15'",
+]
+docs = [
+  "zensical>=0.0.24",
+]
+pytest-corpus = [
+  "argcomplete==3.7.2",
+  "attrs==26.1.0",
+  "hypothesis==6.170.5",
+  "mock==5.2.0",
+  "pytest==9.1.1",
+  "pytest-xdist==3.8.0",
+  "requests==2.34.2",
+  "setuptools==84.1.0",
+  "xmlschema==4.3.2",
+]
+dev = [
+  "tomlkit>=0.15,<0.16",
+  "anyio>=4,<5",
+  "coverage>=7.13,<8",
+  "hypothesis[codemods]==6.170.5",
+  "maturin>=1.14,<2",
+  "pytest>=9.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-cov>=7.1,<8",
+  "ruff>=0.16.4,<1",
+  "ty==0.0.84",
+  "trio>=0.30,<1",
+  "validate-pyproject[all,store]>=0.25,<1",
+  "pytest-html==4.2.0",
+  "pytest-metadata==3.1.1",
+  "pytest-xdist>=3.6.1,<4",
+  "pytest-mock==3.15.1",
+  "pytest-random-order==1.2.0",
+  "pytest-randomly==5.0.0",
+  "platformdirs==4.12.0",
+  "pytest-timeout==2.4.0",
+  "pytest-datadir==1.8.0",
+  "pytest-benchmark==5.3.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Plugin differentials load pytest-randomly explicitly in their temporary projects.
+addopts = ["--strict-config", "--strict-markers", "-p", "no:randomly"]
+filterwarnings = ["error"]
+xfail_strict = true

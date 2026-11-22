@@ -1,0 +1,37 @@
+import unittest
+import weakref
+from conftest import trace
+
+references = []
+
+
+class Token:
+    def __del__(self):
+        trace("unconsumed-error-token-destroyed")
+
+
+class CarriedError(ValueError):
+    def __init__(self, token):
+        self.token = token
+        references.append(weakref.ref(token))
+        super().__init__("third-unconsumed-error")
+
+
+def late_cleanup():
+    raise CarriedError(Token())
+
+
+def early_cleanup():
+    raise ValueError("second-consumed-error")
+
+
+class LifetimeCase(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(late_cleanup)
+        self.addCleanup(early_cleanup)
+
+    def test_body(self):
+        pass
+
+    def tearDown(self):
+        raise RuntimeError("first-consumed-error")

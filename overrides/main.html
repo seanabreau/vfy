@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block htmltitle %}
+  {% if page.title == config.site_name %}
+    <title>{{ config.site_name }}</title>
+  {% else %}
+    {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  <link rel="apple-touch-icon" href="{{ config.site_url }}assets/apple-touch-icon.png">
+  {% set preview_title = config.site_name ~ " — Python tests and coverage" %}
+  {% if page.title and page.title != config.site_name %}
+    {% set preview_title = page.title ~ " - " ~ config.site_name %}
+  {% endif %}
+  {% set preview_description = config.site_description %}
+  {% if page.meta and page.meta.description %}
+    {% set preview_description = page.meta.description %}
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ preview_title }}">
+  <meta property="og:description" content="{{ preview_description }}">
+  <meta property="og:url" content="{{ page.canonical_url | d(config.site_url, true) }}">
+  <meta property="og:image" content="{{ config.site_url }}assets/social-card.png?v=1d6b381f">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="vfy logo">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ preview_title }}">
+  <meta name="twitter:description" content="{{ preview_description }}">
+  <meta name="twitter:image" content="{{ config.site_url }}assets/social-card.png?v=1d6b381f">
+  <meta name="twitter:image:alt" content="vfy logo">
+{% endblock %}

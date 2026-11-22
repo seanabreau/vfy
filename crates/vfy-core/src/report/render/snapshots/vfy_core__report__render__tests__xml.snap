@@ -1,0 +1,25 @@
+---
+source: src/report/render/tests.rs
+expression: "with_row(true, |rows| scrub_xml_environment(&render_xml(rows, Some(1))))"
+---
+<?xml version="1.0" ?>
+<coverage version="vfy" line-rate="0.75" branch-rate="0.5" lines-covered="3" lines-valid="4" branches-covered="1" branches-valid="2" timestamp="0" complexity="0">
+  <sources>
+    <source>.</source>
+  </sources>
+  <packages>
+    <package name="pkg" line-rate="0.75" branch-rate="0.5" complexity="0">
+      <classes>
+        <class name="module.py" filename="pkg/module.py" line-rate="0.75" branch-rate="0.5" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1" />
+            <line number="2" hits="1" branch="true" condition-coverage="50% (1/2)" missing-branches="5" />
+            <line number="3" hits="0" />
+            <line number="5" hits="1" />
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>

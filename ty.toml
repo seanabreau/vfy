@@ -1,0 +1,16 @@
+[src]
+include = ["python", "tests", "scripts", "benchmarks"]
+exclude = ["tests/fixtures"]
+
+[rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "error"
+unsound-assignment = "error"
+unsound-return-statement = "error"
+unsound-yield = "error"
+missing-override-decorator = "error"
+blanket-ignore-comment = "error"
+
+[terminal]
+error-on-warning = true

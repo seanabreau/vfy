@@ -1,0 +1,7 @@
+[tool.coverage.run]
+plugins = ["coverage_conditional_plugin"]
+include = ["*/app.py", "*/omitted.py"]
+[tool.coverage.coverage_conditional_plugin.rules]
+py-gte-312 = "sys_version_info >= (3, 12)"
+[tool.coverage.coverage_conditional_plugin.omit]
+"sys_version_info >= (3, 12)" = ["*/omitted.py"]

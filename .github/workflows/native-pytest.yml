@@ -1,0 +1,335 @@
+name: Native pytest corpus gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/native-pytest.yml
+      - crates/vfy/**
+      - crates/vfy-core/**
+      - crates/vfy-pytest/**
+      - python/vfy/**
+      - validation/pytest_runner/**
+      - docs/about/pytest-test-identity.json
+      - docs/about/pytest-test-policy.json
+      - docs/about/pytest-test-suite.md
+      - Cargo.toml
+      - Cargo.lock
+      - pyproject.toml
+      - uv.lock
+      - rust-toolchain.toml
+      - benchmarks/benchmark_harness.py
+      - benchmarks/project_manifest.py
+      - benchmarks/locks/rich.txt
+      - tests/repository/test_native_project.py
+      - scripts/process_tree.py
+      - scripts/pytest_environment_lock.py
+      - scripts/pytest_execution_accounting.py
+      - scripts/pytest_execution_observations.py
+      - scripts/pytest_execution_probe.py
+      - scripts/pytest_execution_record.py
+      - scripts/pytest_corpus_*.py
+      - tests/repository/test_pytest_execution*.py
+      - tests/repository/test_pytest_corpus_classification.py
+      - tests/repository/test_pytest_corpus_inventory.py
+      - tests/repository/test_pytest_corpus_execution.py
+      - benchmarks/benchmark_provenance.py
+      - tests/repository/test_benchmark_protocol.py
+      - tests/repository/test_native_benchmark.py
+      - tests/integration/**
+      - tests/support/**
+  pull_request:
+    paths:
+      - .github/workflows/native-pytest.yml
+      - crates/vfy/**
+      - crates/vfy-core/**
+      - crates/vfy-pytest/**
+      - python/vfy/**
+      - validation/pytest_runner/**
+      - docs/about/pytest-test-identity.json
+      - docs/about/pytest-test-policy.json
+      - docs/about/pytest-test-suite.md
+      - Cargo.toml
+      - Cargo.lock
+      - pyproject.toml
+      - uv.lock
+      - rust-toolchain.toml
+      - benchmarks/benchmark_harness.py
+      - benchmarks/project_manifest.py
+      - benchmarks/locks/rich.txt
+      - tests/repository/test_native_project.py
+      - scripts/process_tree.py
+      - scripts/pytest_environment_lock.py
+      - scripts/pytest_execution_accounting.py
+      - scripts/pytest_execution_observations.py
+      - scripts/pytest_execution_probe.py
+      - scripts/pytest_execution_record.py
+      - scripts/pytest_corpus_*.py
+      - tests/repository/test_pytest_execution*.py
+      - tests/repository/test_pytest_corpus_classification.py
+      - tests/repository/test_pytest_corpus_inventory.py
+      - tests/repository/test_pytest_corpus_execution.py
+      - benchmarks/benchmark_provenance.py
+      - tests/repository/test_benchmark_protocol.py
+      - tests/repository/test_native_benchmark.py
+      - tests/integration/**
+      - tests/support/**
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: native-pytest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-wheel-corpus:
+    name: Native pytest corpus on ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+        python: ["3.12", "3.13", "3.14", "3.15"]
+    env:
+      CARGO_TARGET_DIR: target/native-pytest/build
+      PYTHONHASHSEED: "0"
+      NATIVE_PYTHON_VERSION: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - name: Install locked build and controller dependencies
+        run: uv sync --locked --group dev --group pytest-corpus --no-install-project --python "$NATIVE_PYTHON_VERSION"
+      - name: Build product wheel and download stock pytest
+        run: |
+          mkdir -p target/native-pytest/dist target/native-pytest/results
+          uv run --no-sync --with pip python -m pip download \
+            --only-binary=:all: --no-deps pytest==9.1.1 \
+            -d target/native-pytest/dist
+          uv run --no-sync python - <<'PY'
+          import hashlib
+          import tomllib
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
+          packages = [
+              package
+              for package in lock["package"]
+              if package["name"] == "pytest" and package["version"] == "9.1.1"
+          ]
+          if len(packages) != 1:
+              raise SystemExit("uv.lock must contain exactly one pytest 9.1.1 package")
+          wheels = [
+              wheel for wheel in packages[0]["wheels"]
+              if urlparse(wheel["url"]).path.endswith(".whl")
+          ]
+          if len(wheels) != 1:
+              raise SystemExit("uv.lock must contain exactly one pytest 9.1.1 wheel")
+          locked_wheel = wheels[0]
+          artifact = Path("target/native-pytest/dist") / Path(
+              urlparse(locked_wheel["url"]).path
+          ).name
+          expected_hash = locked_wheel["hash"]
+          actual_hash = hashlib.sha256(artifact.read_bytes()).hexdigest()
+          if expected_hash != f"sha256:{actual_hash}":
+              raise SystemExit(
+                  f"downloaded pytest wheel hash differs from uv.lock: {artifact.name}"
+              )
+          print(f"Verified {artifact.name} against uv.lock ({actual_hash})")
+          PY
+          uv run --no-sync maturin build --release --locked \
+            --out target/native-pytest/dist
+          uv export --locked --no-dev --group pytest-corpus --no-emit-project \
+            --format requirements-txt \
+            --output-file target/native-pytest/results/pytest-corpus-requirements.txt
+          cargo fmt --all --check
+      - name: Install the same product artifacts into both runners
+        run: |
+          # Equal-length roots keep pytest's clipped repr boundaries comparable.
+          uv venv --python "$NATIVE_PYTHON_VERSION" target/native-pytest/reference
+          uv venv --python "$NATIVE_PYTHON_VERSION" target/native-pytest/candidate
+          for environment in reference candidate; do
+            python_path="target/native-pytest/$environment/bin/python"
+            uv pip sync --python "$python_path" \
+              target/native-pytest/results/pytest-corpus-requirements.txt
+            uv pip install --no-deps --reinstall-package pytest --python "$python_path" \
+              target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl
+            uv pip install --no-deps --reinstall-package vfy --python "$python_path" \
+              target/native-pytest/dist/vfy-*.whl
+            uv pip check --python "target/native-pytest/$environment/bin/python"
+            test "$(target/native-pytest/$environment/bin/python -c 'from importlib.metadata import version; print(version("pytest"))')" = 9.1.1
+          done
+          uv pip install --no-deps --python .venv/bin/python target/native-pytest/dist/vfy-*.whl
+      - name: Record installed runner dependency locks
+        run: |
+          uv run --no-sync python scripts/pytest_environment_lock.py \
+            --python target/native-pytest/reference/bin/python \
+            --output target/native-pytest/results/stock-dependencies.json
+          uv run --no-sync python scripts/pytest_environment_lock.py \
+            --python target/native-pytest/candidate/bin/python \
+            --output target/native-pytest/results/candidate-dependencies.json
+      - name: Test native behavior through the installed vfy wheel
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/integration/test_native_*.py \
+            tests/integration/test_pytest_config_projection.py
+      - name: Test watch and mutation process boundaries
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/integration/test_watch_native_workers.py \
+            tests/integration/test_watch.py::test_native_watch_discards_obsolete_evidence_and_publishes_recovery \
+            tests/integration/test_mutate.py \
+            tests/integration/test_mutation_file_isolation.py \
+            tests/integration/test_mutation_file_cleanup.py
+      - name: Compare the pinned Rich suite on stock and native execution
+        run: |
+          uv venv --python .venv/bin/python target/native-pytest/rich-environment
+          uv pip sync --python target/native-pytest/rich-environment/bin/python \
+            --require-hashes benchmarks/locks/rich.txt
+          uv pip install --no-deps --python target/native-pytest/rich-environment/bin/python \
+            target/native-pytest/dist/vfy-*.whl
+          uv run --no-sync python -c \
+            'from pathlib import Path; from benchmarks.prepare_projects import checkout_project; from benchmarks.project_manifest import manifest; checkout_project(manifest("rich"), Path("target/native-pytest/upstream-rich"))'
+          uv run --no-sync python validation/pytest_runner/check_native_project.py \
+            --upstream-root target/native-pytest/upstream-rich \
+            --python target/native-pytest/rich-environment/bin/python \
+            --vfy-wheel target/native-pytest/dist/vfy-*.whl \
+            --output target/native-pytest/results/native-rich
+      - name: Check native capture lifecycle against stock pytest
+        run: |
+          uv run --no-sync python validation/pytest_runner/check_native_capture_lifecycle.py \
+            --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+            --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+            --output target/native-pytest/results/native-capture-lifecycle
+      - name: Compare execution, failure, and warning contracts
+        run: |
+          for checker in check_native_contract check_native_maxfail check_native_warnings check_native_review_regressions; do
+            uv run --no-sync python "validation/pytest_runner/$checker.py" \
+              --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+              --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+              --output "target/native-pytest/results/$checker"
+          done
+      - name: Compare installed product coverage and reporting boundaries
+        run: |
+          for checker in check_vfy_coverage_boundary check_vfy_cache_boundary check_vfy_doctest_boundary check_native_durations check_native_vfy_html; do
+            uv run --no-sync python "validation/pytest_runner/$checker.py" \
+              --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+              --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+              --output "target/native-pytest/results/$checker"
+          done
+      - name: Verify stock pytest survives vfy install lifecycle
+        run: |
+          uv run --no-sync python validation/pytest_runner/check_vfy_install_lifecycle.py \
+            --vfy-wheel target/native-pytest/dist/vfy-*.whl \
+            --stock-pytest-wheel target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+            --python target/native-pytest/reference/bin/python \
+            --output target/native-pytest/results/install-lifecycle.json
+      - name: Test accounting and execution record gates
+        run: |
+          uv run --no-sync python -m pytest -q \
+            validation/pytest_runner/test_native_rejections.py \
+            tests/repository/test_pytest_execution_accounting.py \
+            tests/repository/test_pytest_execution_record.py \
+            tests/repository/test_pytest_corpus_execution.py
+      - name: Compare controlled public execution records
+        run: |
+          uv run --no-sync python validation/pytest_runner/check_native_execution_record.py \
+            --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+            --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+            --stock-pytest-wheel target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+            --candidate-pytest-wheel target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+            --stock-runner-wheel target/native-pytest/dist/vfy-*.whl \
+            --candidate-runner-wheel target/native-pytest/dist/vfy-*.whl \
+            --output target/native-pytest/results/execution-record
+      - name: Clone pinned upstream test suite
+        run: |
+          git clone --quiet --depth 1 --branch 9.1.1 \
+            https://github.com/pytest-dev/pytest.git target/native-pytest/upstream-pytest
+          test "$(git -C target/native-pytest/upstream-pytest rev-parse HEAD)" = \
+            cf470ec0bf7eb89cd97dd56df4859eae5db46447
+      - name: Collect and classify the pinned upstream suite
+        run: |
+          reference_python="$PWD/target/native-pytest/reference/bin/python"
+          (
+            cd target/native-pytest/upstream-pytest
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 \
+              "$reference_python" -m pytest --collect-only -q --disable-warnings
+          ) > target/native-pytest/results/pytest-collection.txt
+          uv run --no-sync python scripts/pytest_corpus_inventory.py \
+            --pytest-root target/native-pytest/upstream-pytest \
+            --collect-log target/native-pytest/results/pytest-collection.txt \
+            --identity-manifest docs/about/pytest-test-identity.json \
+            --output target/native-pytest/results/pytest-test-suite.json
+          uv run --no-sync python scripts/pytest_corpus_classification.py \
+            --inventory target/native-pytest/results/pytest-test-suite.json \
+            --policy docs/about/pytest-test-policy.json \
+            --output target/native-pytest/results/pytest-test-classification.json
+      - name: Record executable unsupported-case checks
+        run: |
+          uv run --no-sync python validation/pytest_runner/check_native_rejections.py \
+            --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+            --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+            --classification target/native-pytest/results/pytest-test-classification.json \
+            --upstream-root target/native-pytest/upstream-pytest \
+            --pytest-artifact "$PWD/target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl" \
+            --runner-artifact "$PWD"/target/native-pytest/dist/vfy-*.whl \
+            --output target/native-pytest/results/rejections
+      - name: Check supported startup hooks and runtime plug-in rejection
+        run: |
+          uv run --no-sync python validation/pytest_runner/check_upstream_plugin_api.py \
+            --upstream-root target/native-pytest/upstream-pytest \
+            --stock-python "$PWD/target/native-pytest/reference/bin/python" \
+            --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
+            --output target/native-pytest/results/plugin-api
+      - name: Execute and account for the full ordered corpus
+        run: |
+          uv run --no-sync python scripts/pytest_corpus_execution.py \
+            --upstream-root target/native-pytest/upstream-pytest \
+            --classification target/native-pytest/results/pytest-test-classification.json \
+            --stock-python target/native-pytest/reference/bin/python \
+            --candidate-python target/native-pytest/candidate/bin/python \
+            --stock-runner-artifact target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+            --stock-runner-artifact target/native-pytest/dist/vfy-*.whl \
+            --candidate-runner-artifact target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+            --candidate-runner-artifact target/native-pytest/dist/vfy-*.whl \
+            --rejections target/native-pytest/results/rejections/rejections.json \
+            --output target/native-pytest/results/full-corpus
+      - name: Test native benchmark validation and provenance
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/repository/test_native_benchmark.py \
+            tests/repository/test_benchmark_protocol.py
+          for environment in reference candidate; do
+            "target/native-pytest/$environment/bin/python" -c \
+              'from pathlib import Path; import subprocess, sys; from benchmarks.benchmark_provenance import write_build_manifest; root = Path.cwd(); write_build_manifest(Path(sys.argv[1]), source_root=root, source_revision=subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(), wheel=next(Path("target/native-pytest/dist").glob("vfy-*.whl")), build_command=("maturin", "build", "--release", "--locked", "--out", "target/native-pytest/dist"))' \
+              "target/native-pytest/results/$environment-build.json"
+          done
+          for workload in sync async fixtures capture; do
+            uv run --no-sync python validation/pytest_runner/benchmark_vfy_coverage.py \
+              --stock-python target/native-pytest/reference/bin/python \
+              --candidate-python target/native-pytest/candidate/bin/python \
+              --stock-wheel target/native-pytest/dist/vfy-*.whl \
+              --candidate-wheel target/native-pytest/dist/vfy-*.whl \
+              --stock-pytest-wheel target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+              --candidate-pytest-wheel target/native-pytest/dist/pytest-9.1.1-py3-none-any.whl \
+              --stock-build-manifest target/native-pytest/results/reference-build.json \
+              --candidate-build-manifest target/native-pytest/results/candidate-build.json \
+              --workload "$workload" --cases 1000 --validate-only \
+              --output "target/native-pytest/results/benchmark-$workload.json"
+          done
+      - name: Retain installation and corpus evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-pytest-${{ matrix.os }}-py${{ matrix.python }}
+          path: target/native-pytest/results/
+          if-no-files-found: ignore

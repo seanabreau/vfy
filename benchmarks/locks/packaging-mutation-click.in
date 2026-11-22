@@ -1,0 +1,2 @@
+# mutmut's Click dependency is absent from Packaging's project lock.
+click==8.4.2

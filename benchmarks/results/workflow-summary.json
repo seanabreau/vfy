@@ -1,0 +1,41 @@
+[
+  {
+    "package": "Packaging",
+    "workload": "Parallel tests",
+    "reference": "pytest-xdist",
+    "vfy_seconds": 12.045880255,
+    "reference_seconds": 22.694862135,
+    "vfy_memory_mib": 582.7236328125,
+    "reference_memory_mib": 1641.392578125,
+    "labels": [
+      "1.9× faster",
+      "64% less memory"
+    ]
+  },
+  {
+    "package": "Rich",
+    "workload": "Affected-test selection",
+    "reference": "pytest-testmon",
+    "vfy_seconds": 0.385311083,
+    "reference_seconds": 0.733127875,
+    "vfy_memory_mib": 59.970703125,
+    "reference_memory_mib": 44.87109375,
+    "labels": [
+      "1.9× faster",
+      "34% more memory"
+    ]
+  },
+  {
+    "package": "flake8-simplify",
+    "workload": "Mutation testing",
+    "reference": "mutmut",
+    "vfy_seconds": 1.5923715005,
+    "reference_seconds": 28.493440366999998,
+    "vfy_memory_mib": 69.337890625,
+    "reference_memory_mib": 138.0341796875,
+    "labels": [
+      "17.9× faster",
+      "50% less memory"
+    ]
+  }
+]

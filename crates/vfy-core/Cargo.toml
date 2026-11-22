@@ -1,0 +1,69 @@
+[package]
+name = "vfy-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internal crate: vfy coverage engine without Python dependencies"
+publish = false
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+fancy-regex.workspace = true
+indexmap.workspace = true
+regex.workspace = true
+regex-automata.workspace = true
+regex-syntax.workspace = true
+jiff.workspace = true
+notify.workspace = true
+pep440_rs.workspace = true
+rayon.workspace = true
+ruff_python_ast.workspace = true
+ruff_python_parser.workspace = true
+ruff_text_size.workspace = true
+rusqlite.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+smallvec.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+tempfile.workspace = true
+toml.workspace = true
+unicode-general-category.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+codspeed-criterion-compat.workspace = true
+insta.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "engine"
+harness = false
+
+[[bench]]
+name = "semantic_mcdc_resources"
+harness = false
+
+[[bench]]
+name = "evidence"
+harness = false
+
+[[bench]]
+name = "engine_codspeed"
+harness = false
+
+[[bench]]
+name = "evidence_codspeed"
+harness = false

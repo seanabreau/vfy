@@ -1,0 +1,43 @@
+import unittest
+import pytest
+from conftest import trace
+
+
+@pytest.fixture
+def external_resource(request):
+    trace("external-resource-setup", instance=request.instance is not None)
+    request.instance.injected = 7
+    yield
+    trace("external-resource-teardown")
+
+
+@pytest.mark.usefixtures("external_resource")
+class FixtureCase(unittest.TestCase):
+    def test_usefixtures(self):
+        self.assertEqual(self.injected, 7)
+        trace("usefixtures-body")
+
+
+class UnsupportedMethodInjection(unittest.TestCase):
+    def test_requires_fixture_argument(self, external_resource):
+        trace("must-not-inject-arguments")
+
+
+class SubtestCase(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(trace, "subtest-cleanup")
+
+    def tearDown(self):
+        trace("subtest-tearDown")
+
+    def test_subtests(self):
+        for value in (0, 1, 2, 3):
+            with self.subTest("group", value=value):
+                trace("subtest-body", value=value)
+                if value == 1:
+                    self.fail("subtest-failure")
+                if value == 2:
+                    self.skipTest("subtest-skip")
+                if value == 3:
+                    raise ValueError("subtest-error")
+        trace("after-subtests")

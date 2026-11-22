@@ -1,0 +1,66 @@
+import abc
+import unittest
+
+
+class CacheTest(unittest.TestCase):
+    test_noncallable = 42
+
+    def test_z(self):
+        pass
+
+    def test_a(self):
+        pass
+
+    def test_hidden(self):
+        raise AssertionError("method __test__ false must stay uncollected")
+
+    test_hidden.__test__ = False
+
+
+class DerivedCache(CacheTest):
+    def test_b(self):
+        pass
+
+
+class ConstructorCase(unittest.TestCase):
+    def __init__(self, methodName):
+        super().__init__(methodName)
+
+    def test_required_constructor_argument(self):
+        pass
+
+
+class RunOnly(unittest.TestCase):
+    def runTest(self):
+        pass
+
+
+class HiddenCase(unittest.TestCase):
+    __test__ = False
+
+    def test_hidden_class(self):
+        raise AssertionError("class __test__ false must stay uncollected")
+
+
+class InheritedHidden(HiddenCase):
+    pass
+
+
+class ResurrectedCase(HiddenCase):
+    __test__ = True
+
+    def test_hidden_class(self):
+        pass
+
+
+class AbstractCase(unittest.TestCase, abc.ABC):
+    @abc.abstractmethod
+    def test_abstract(self):
+        pass
+
+
+AliasCase = CacheTest
+
+
+def load_tests(loader, tests, pattern):
+    raise AssertionError("pytest does not implement unittest load_tests")

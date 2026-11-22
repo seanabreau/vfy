@@ -1,0 +1,1035 @@
+[
+ {
+  "name": "arrow",
+  "url": "https://github.com/arrow-py/arrow",
+  "commit": "2224255c4acc594d734cef0bbc83360452a67983",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "requirements/requirements-tests.txt"
+  ],
+  "python": "3.13",
+  "notes": "Test deps from requirements/requirements-tests.txt (tox [testenv] deps). Config from tox.ini [pytest] (addopts include --cov)."
+ },
+ {
+  "name": "asttokens",
+  "url": "https://github.com/gristlabs/asttokens",
+  "commit": "f97a6e1403d9f0e93940a11b507524550a5c3896",
+  "install": [
+   "-e",
+   ".",
+   "astroid>=2,<5",
+   "pytest-cov",
+   "pytest-xdist"
+  ],
+  "python": "3.13",
+  "notes": "Test extra in setup.cfg is '.[test]' = astroid>=2,<5, pytest<9.0, pytest-cov, pytest-xdist. The pytest<9.0 pin is dropped so pytest 9.1.1 (the expected_pytest version) is used; the other test deps are installed explicitly. addopts '-m not slow' gives the 2 deselected. Result 125 passed, 1 skipped, 2 deselected reproduced exactly."
+ },
+ {
+  "name": "attrs",
+  "url": "https://github.com/python-attrs/attrs",
+  "commit": "ee66e7274852438cc23d4240a1a9cd632fda8b52",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "pyright"
+  ],
+  "python": "3.13",
+  "notes": "Uses the pyright group (includes tests). The pyright tests need the pyright executable on PATH; the venv's pyright is 1.1.414, the uv.lock pin. Differs: 1 failed (test_pyright_baseline, typeshed/pyright output) vs 3 expected; the other two baseline failures are not reproduced, and passed is 1407 vs 1405. Environment-dependent (pyright output); not resolved."
+ },
+ {
+  "name": "Babel",
+  "url": "https://github.com/python-babel/babel",
+  "commit": "e2a17919f0eb988bfea2883b00793ca4d5d37c4f",
+  "install": [
+   "-e",
+   ".[dev]"
+  ],
+  "pre": [
+   "make import-cldr"
+  ],
+  "python": "3.13",
+  "notes": "Automatic preparation is skipped because the CLDR 48.2 download from unicode.org returns 403 in the managed environment. CI: pip install -e .[dev], then make import-cldr. Latest default-branch commit on or before 2026-10-22.",
+  "skip": true
+ },
+ {
+  "name": "boltons",
+  "url": "https://github.com/mahmoud/boltons",
+  "commit": "4e5faa3d7e4008d89e0d8bf1ea87b6d9a061a16d",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "notes": "Test deps from [dependency-groups].dev (pytest>=8). Stock pytest from the checkout root collects tests/ (testpaths unset); upstream tox adds --doctest-modules over the installed package, which this recipe does not use.",
+  "python": "3.13"
+ },
+ {
+  "name": "bottle",
+  "url": "https://github.com/bottlepy/bottle",
+  "commit": "8ec5fe29420d14998c0d86885083983eaea8b839",
+  "install": [
+   "-e",
+   ".[dev]"
+  ],
+  "python": "3.13",
+  "notes": "Test deps from the dev extra (pytest, pytest-cov, build, twine)."
+ },
+ {
+  "name": "cachetools",
+  "url": "https://github.com/tkem/cachetools",
+  "commit": "6f23e2a7b75a42d30cb9d890ab3ca4059ee01bfd",
+  "install": [
+   "-e",
+   ".",
+   "pytest-cov"
+  ],
+  "python": "3.13",
+  "notes": "tox.ini [testenv] deps are pytest and pytest-cov only; pytest itself comes from the harness pin (pytest 9.1.1)."
+ },
+ {
+  "name": "cattrs",
+  "url": "https://github.com/python-attrs/cattrs",
+  "commit": "bde101a5a67997c61a3ee0e971386a82fe141d4e",
+  "timeout": 600,
+  "install": [
+   "-e",
+   ".[bson,cbor2,msgpack,msgspec,orjson,pyyaml,tomlkit,tomllib,ujson]",
+   "--group",
+   "test"
+  ],
+  "notes": "Latest default-branch commit dated on or before 2026-10-22. The upstream Justfile test and coverage recipes use all extras and the test group; list the extras explicitly here. pytest-benchmark is required because [tool.pytest] addopts passes --benchmark-* flags. pytest-typing, mypy, and pyrefly install only on CPython 3.14, so they are skipped on 3.13.",
+  "python": "3.13"
+ },
+ {
+  "name": "charset_normalizer",
+  "url": "https://github.com/Ousret/charset_normalizer",
+  "commit": "0a9201767e9d888b5a5ed7ca44400192474ad1b0",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "pytest_pinned_by_project": true,
+  "python": "3.13",
+  "notes": "dev group. Project pins pytest==9.0.3 in that group, so the harness 9.1.1 pin is skipped. Matches."
+ },
+ {
+  "name": "Click",
+  "url": "https://github.com/pallets/click",
+  "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "notes": "[tool.pytest.ini_options] addopts sets -m 'not stress' (31,000 deselected) and filterwarnings=error; no pytest_args needed.",
+  "python": "3.13"
+ },
+ {
+  "name": "cssselect",
+  "url": "https://github.com/scrapy/cssselect",
+  "commit": "3069b6da75e1adf27939ca541dcc9fb9b961abc6",
+  "install": [
+   "-e",
+   ".",
+   "lxml>=4.4",
+   "pytest-cov>=7.0.0",
+   "sybil"
+  ],
+  "python": "3.13",
+  "notes": "No test extra in pyproject; deps from tox.ini [testenv] deps. Default testpaths is tests/."
+ },
+ {
+  "name": "dateutil",
+  "url": "https://github.com/dateutil/dateutil",
+  "commit": "10f317fde11ce5bc6540e83f896af10e67d52937",
+  "pre": [
+   "curl -fsSL https://github.com/eggert/tz/archive/380c07cef01c71c1f93e9709d9f8c79b91cff063.tar.gz -o .venv/tzdb-2024a.tar.gz && printf 'a9f578eebaa6562484afdbdddee3790a89c5ef6b9f7e65febd2fc9a375962338  .venv/tzdb-2024a.tar.gz\\n' | sha256sum -c - && tar -xzf .venv/tzdb-2024a.tar.gz -C .venv && printf '2024a\\n' > .venv/tz-380c07cef01c71c1f93e9709d9f8c79b91cff063/version && make -s -C .venv/tz-380c07cef01c71c1f93e9709d9f8c79b91cff063 install DESTDIR=\"$(pwd)/.venv/tzdata-2024a\" DATAFORM=main"
+  ],
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "requirements-dev.txt"
+  ],
+  "python": "3.13",
+  "env": {
+   "TZ": "America/New_York"
+  },
+  "env_paths": {
+   "PYTHONTZPATH": ".venv/tzdata-2024a/usr/share/zoneinfo"
+  },
+  "notes": "Latest default-branch commit on or before 2026-10-22 (committed 2026-10-21). Test deps from requirements-dev.txt. Upstream CI builds IANA tzdb 2024a with DATAFORM=main; this recipe builds the pinned, checksum-verified source in the checkout environment. TZ=America/New_York keeps the local abbreviation test distinct from UTC and GMT."
+ },
+ {
+  "name": "deprecated",
+  "url": "https://github.com/laurent-laporte-pro/deprecated",
+  "commit": "24b4b954c29e3783abab77a23e9f7cca1ca66491",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "Project [dependency-groups] dev pins pytest == 9.1.1, the same version the harness pins, so pytest_pinned_by_project is not needed. dev group also brings pytest-cov, mypy, ruff, packaging, coverage (not used by the stock run). requires-python >=3.12; run on CPython 3.13. Default addopts '-ra --strict-markers --strict-config' from pyproject."
+ },
+ {
+  "name": "email-validator",
+  "url": "https://github.com/JoshData/python-email-validator",
+  "commit": "4f3293942e624a7630083c66930127102433ccb1",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "test_requirements.txt"
+  ],
+  "pytest_pinned_by_project": true,
+  "python": "3.13",
+  "pytest_args": [
+   "-k",
+   "not network"
+  ],
+  "notes": "test_requirements.txt pins pytest==9.0.3, so the harness pin is skipped. The Makefile test target uses -k 'not network'; the excluded Gmail DNS cache test requires external DNS."
+ },
+ {
+  "name": "executing",
+  "url": "https://github.com/alexmojaki/executing",
+  "commit": "57917e8fdaafdb2fb7330f89d259d863eeda6553",
+  "install": [
+   "-e",
+   ".[tests]"
+  ],
+  "notes": "Test deps from the tests extra (includes asttokens, ipython, littleutils, rich). tox passes FIX/ADD/SLOW env flags only for regeneration, not for the default run.",
+  "python": "3.13"
+ },
+ {
+  "name": "falcon",
+  "url": "https://github.com/falconry/falcon",
+  "commit": "05b35ee93d10f616fbdd192bbf860ec9e59f9e14",
+  "install": [
+   "-e",
+   ".[test]"
+  ],
+  "python": "3.13",
+  "notes": "First try with requirements/tests gave 4292 passed, 358 skipped (expected 4,026 passed, 584 skipped). Trying the test extra (pytest only) to match the expected skip set."
+ },
+ {
+  "name": "filelock",
+  "url": "https://github.com/tox-dev/filelock",
+  "commit": "22f0776dd499690d71d2e6d2f95e1662a76db75d",
+  "timeout": 600,
+  "umask": "0022",
+  "install": [
+   ".",
+   "--group",
+   "test"
+  ],
+  "python": "3.12",
+  "notes": "Test group from pyproject dependency-groups. CPython 3.12 is supported upstream; on 3.13.5 the daemon-loop shutdown tests fail under stock pytest because their lock markers persist. The 0022 umask lets the private-directory swap test create its intended 0755 replacement. Non-editable install: hatch-vcs writes src/filelock/version.py, which is gitignored and removed by the harness's git clean before the run, so an editable install breaks import."
+ },
+ {
+  "name": "Flask",
+  "url": "https://github.com/pallets/flask",
+  "commit": "d086db856be187255b8ec61ef409357393020f32",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] tests group: asgiref, pytest, python-dotenv (the unpinned pytest is replaced by the harness pin pytest==9.1.1). Project pytest config: testpaths=tests, filterwarnings=error. Expected 494 passed, no skips."
+ },
+ {
+  "name": "freezegun",
+  "url": "https://github.com/spulec/freezegun",
+  "commit": "92d61b3f5c31942a1039713574487bdcfcdbbfff",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "requirements.txt"
+  ],
+  "python": "3.13",
+  "notes": "requirements.txt (tox deps); pytest unpinned. Matches. The 4 warnings in the summary are excluded, as in the protocol."
+ },
+ {
+  "name": "frozenlist",
+  "url": "https://github.com/aio-libs/frozenlist",
+  "commit": "874155c8fecbb8876e4582c12fada764db77adcb",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "requirements/test.txt"
+  ],
+  "notes": "requirements/test.txt pins pytest==9.1.1 (same as the harness pin, so not pytest_pinned_by_project) and pytest-cov, which pytest.ini requires via -p pytest_cov. Editable build uses the in-tree PEP 517 backend and cythonizes the extensions (pure-python defaults to off on CPython, matching make .develop). pytest.ini adds --doctest-modules, testpaths=tests/.",
+  "python": "3.13"
+ },
+ {
+  "name": "gunicorn",
+  "url": "https://github.com/benoitc/gunicorn",
+  "commit": "afc7d2fd5dd9f1de455b1be6c10044030c0adf8e",
+  "install": [
+   "-e",
+   ".[testing]"
+  ],
+  "python": "3.13",
+  "notes": "testing extra from pyproject. First try with requirements_test.txt gave 2586 passed, 42 skipped (expected 2,337 passed, 289 skipped); requirements_test.txt adds gunicorn_h1c, which the extra lacks."
+ },
+ {
+  "name": "h11",
+  "url": "https://github.com/python-hyper/h11",
+  "commit": "62c5068c971579d61fa1b55373390e12f25fd856",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "test-requirements.txt"
+  ],
+  "python": "3.13",
+  "notes": "tox.ini [testenv] deps = -r test-requirements.txt (pytest, pytest-cov). Tox runs 'pytest h11' (tests live in h11/tests); stock run here is bare 'pytest' from the checkout root, which gives the same 78 passed. No pytest config in pyproject."
+ },
+ {
+  "name": "h2",
+  "url": "https://github.com/python-hyper/h2",
+  "commit": "bc239af1d1b85bc70482804f30a0e0e587d90a08",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "testing"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] testing group: pytest>=8.3.3,<10 (harness pin pytest==9.1.1 used), pytest-cov, pytest-xdist (not used, no -n), hypothesis<7 (property tests run in the default collection). Project pytest config: testpaths=tests. The vfy-route differences recorded in seed-1 (hypothesis differing_executors health check) are not part of the stock run."
+ },
+ {
+  "name": "HTTPX",
+  "url": "https://github.com/encode/httpx",
+  "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+  "install": [
+   "-r",
+   "requirements.txt"
+  ],
+  "python": "3.13",
+  "notes": "requirements.txt (scripts/install; it also installs -e .[brotli,cli,http2,socks,zstd]). Pins pytest==8.4.1, so the project pin is used and the harness 9.1.1 pin is skipped. Does NOT reproduce. The harness run in this sandbox gives 44 failed, 1373 passed, 1 skipped, against 53 failed and 1364 passed expected. The sandbox sets HTTP(S)_PROXY and NO_PROXY, and tests/client/test_proxies.py and tests/test_utils.py expect no proxy environment (those account for most of the 44). With the proxy variables unset (env -u), 4 tests fail: test_async_proxy_close[asyncio], test_async_proxy_close[trio], test_sync_proxy_close (DNS lookup of example.com) and test_write_timeout[trio] (timing). The baseline proxy environment is unknown.",
+  "pytest_pinned_by_project": true
+ },
+ {
+  "name": "humanize",
+  "url": "https://github.com/python-humanize/humanize",
+  "commit": "785e5dcc0d0308ad0dff3f6cc0faa7085ad0375b",
+  "install": [
+   ".[tests]"
+  ],
+  "python": "3.13",
+  "notes": "tests extra, installed non-editable: the hatch-vcs generated humanize/_version.py is missing from an editable install and collection fails. Matches."
+ },
+ {
+  "name": "idna",
+  "url": "https://github.com/kjd/idna",
+  "commit": "7c55529db07b94781037703199f57fc9b7c0dc40",
+  "install": [
+   "-e",
+   ".",
+   "hypothesis>=6.141.1"
+  ],
+  "python": "3.13",
+  "notes": "Excluded in seed-1 (no stock baseline). Latest default-branch (master) commit dated on or before 2026-10-22: 7c55529d, 2026-10-22 16:47 +0800 (merge of PR #283). Test deps from the CI requirements file .github/requirements/test.txt that the run needs: hypothesis (tests/test_idna_properties.py imports it), with pytest coming from the harness pin. attrs and sortedcontainers come with hypothesis. CI's pytest step also runs coverage; not used here."
+ },
+ {
+  "name": "inflect",
+  "url": "https://github.com/jaraco/inflect",
+  "commit": "0aa3f7a951616101bb67dedc385163e74a3f05e7",
+  "install": [
+   "-e",
+   ".[test]"
+  ],
+  "notes": "Test extra from pyproject (pytest, pygments). pytest.ini adds --doctest-modules and --import-mode importlib, so no extra args are needed.",
+  "python": "3.13"
+ },
+ {
+  "name": "iniconfig",
+  "url": "https://github.com/pytest-dev/iniconfig",
+  "commit": "316fbfaf2752d89326e1e75b45cd070f5b5ace9a",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "dev dependency group from pyproject."
+ },
+ {
+  "name": "itsdangerous",
+  "url": "https://github.com/pallets/itsdangerous",
+  "commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] tests group: freezegun, pytest (replaced by the harness pin pytest==9.1.1). Project pytest config: testpaths=tests, filterwarnings=error."
+ },
+ {
+  "name": "Jinja",
+  "url": "https://github.com/pallets/jinja",
+  "commit": "5ef70112a1ff19c05324ff889dd30405b1002044",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "tests group. Matches without the i18n extra."
+ },
+ {
+  "name": "jsonschema",
+  "url": "https://github.com/python-jsonschema/jsonschema",
+  "commit": "c497561ea0a95f5aac09cd63d15eb1420eb7bbec",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "notes": "Test group from [dependency-groups].test (virtue, jsonpath-ng); no format extras, as in the noxfile no-extras session. JSON-Schema-Test-Suite is the in-tree json/ directory, found through the editable install; JSON_SCHEMA_TEST_SUITE is not needed.",
+  "python": "3.13"
+ },
+ {
+  "name": "loguru",
+  "url": "https://github.com/Delgan/loguru",
+  "commit": "bce5dfd3b435b1d1658507d7e095ad7a9919bf1c",
+  "install": [
+   "-e",
+   ".[dev]"
+  ],
+  "notes": "Test deps are the dev extra: it pins pytest==9.1.1 (same as the harness pin) and pytest-mypy-plugins==4.0.3, which adds YAML test items. The dev extra also pulls docs, lint, and packaging tools, so the install is larger than the test run needs. Stock pytest reproduces 1,679 passed, 46 skipped; vfy rejects the YAML items (see migration.md).",
+  "python": "3.13"
+ },
+ {
+  "name": "mako",
+  "url": "https://github.com/sqlalchemy/mako",
+  "commit": "14889bc0feacd12102ee61f0769677be2fddbc1b",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "tests dependency group from pyproject."
+ },
+ {
+  "name": "markdown-it-py",
+  "url": "https://github.com/executablebooks/markdown-it-py",
+  "commit": "6f586542653a56d2ee8549a0dccfaa6ba5ebe14a",
+  "install": [
+   "-e",
+   ".[testing,linkify]"
+  ],
+  "python": "3.13",
+  "notes": "CI: pip install -e .[testing,linkify]; pytest tests/. The CI spec-refresh step is skipped because tests/test_cmark_spec/commonmark.json and spec.md are committed. The full vfy follow-up matches 1032 passes; the pytest-free route needs the removed regression fixture. Latest default-branch commit on or before 2026-10-22.",
+  "pytest_args": [
+   "tests/"
+  ]
+ },
+ {
+  "name": "MarkupSafe",
+  "url": "https://github.com/pallets/markupsafe",
+  "commit": "4e111271b1494995708a9e878a10829b5e10c7ba",
+  "install": [
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "env": {
+   "CIBUILDWHEEL": "1",
+   "UV_NO_CACHE": "1"
+  },
+  "notes": "Test deps use the tests group with pytest==9.1.1 and pytest-run-parallel on Python >=3.13. Build a noneditable wheel with a compiler and matching Python headers. CIBUILDWHEEL=1 rejects the upstream pure-Python fallback; UV_NO_CACHE=1 prevents reusing a cached fallback wheel in either environment. Verify markupsafe._speedups before running both routes. Earlier regular-wheel runs installed a pure-Python fallback and skipped 41 speedup tests. Project config: testpaths=tests, filterwarnings=error."
+ },
+ {
+  "name": "marshmallow",
+  "url": "https://github.com/marshmallow-code/marshmallow",
+  "commit": "b762ea2d59ca52fe5df76b90de14bed7e5ec5607",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests",
+   "freezegun==1.5.5"
+  ],
+  "python": "3.13",
+  "collection_time": "2020-01-02T03:04:05",
+  "notes": "Tests group. Freeze collection on both routes so datetime.now parameter values match; restore the live clock before test execution."
+ },
+ {
+  "name": "mistune",
+  "url": "https://github.com/lepture/mistune",
+  "commit": "4bbaa04c391d650a2e1219781c9a9acd60571cce",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "notes": "Test group from [dependency-groups].test (pytest, pytest-cov, mypy, ruff). pytest config sets pythonpath=src,. and testpaths=tests.",
+  "python": "3.13"
+ },
+ {
+  "name": "more-itertools",
+  "url": "https://github.com/more-itertools/more-itertools",
+  "commit": "4aeb4338ae1407d8da9723e86da99efeb446f719",
+  "install": [
+   "-e",
+   "."
+  ],
+  "python": "3.13",
+  "notes": "No test deps declared; tox runs unittest. Installed editable only."
+ },
+ {
+  "name": "multidict",
+  "url": "https://github.com/aio-libs/multidict",
+  "commit": "cdbdc5afc1b92eaef1f4282076992ca07fc4f275",
+  "install": [
+   ".",
+   "-r",
+   "requirements/pytest.txt"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are requirements/pytest.txt (pytest==9.1.1 matches the harness pin; pytest-cov, pytest-codspeed, objgraph, psutil, cffi). Two deviations from CI ('pip install -e .' and plain pytest): (1) installed NON-editable ('.'): the uv editable build produced no multidict._multidict C extension, which gave 1622 ModuleNotFoundError errors and 37 failures. (2) env PYTHONSAFEPATH=1: the checkout root has a multidict/ package directory, and 'python -m pytest' would put the checkout root first on sys.path, so the source tree would shadow the installed build that has the .so. pytest.ini addopts include --cov and -m 'not hypothesis', so requirements/pytest-hypothesis.txt is not installed and the hypothesis tests are not run. The run takes about 2 minutes on this machine.",
+  "env": {
+   "PYTHONSAFEPATH": "1"
+  }
+ },
+ {
+  "name": "mutmut",
+  "url": "https://github.com/boxed/mutmut",
+  "commit": "7d5fff33cff22da5f6d0eb1a7bdc764362444221",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "dev group, as CI (uv sync --dev; project dependencies also include pytest). Matches. The 3 failures are test_e2e_type_checking (pyrefly and mypy snapshots) and test_code_coverage::test_excluded_lines_reports_only_the_first_line_of_each_statement; not investigated."
+ },
+ {
+  "name": "packaging",
+  "url": "https://github.com/pypa/packaging",
+  "commit": "7464e38990e0e140206051d8ebadd1c2f83239e6",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "notes": "Test group from [dependency-groups].test (hypothesis, pretend, pip, coverage, tomli_w). addopts deselects the property-based tests with -m 'not property' (427 deselected). Large suite (about 62k cases).",
+  "python": "3.13"
+ },
+ {
+  "name": "parse",
+  "url": "https://github.com/r1chardj0n3s/parse",
+  "commit": "175b52d5079dd632332bdc8a075f25867d5a6a17",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "tests/requirements.txt"
+  ],
+  "python": "3.13",
+  "notes": "Test deps from tests/requirements.txt (pytest, pytest-cov, typing-extensions)."
+ },
+ {
+  "name": "pathspec",
+  "url": "https://github.com/cpburnz/python-pathspec",
+  "commit": "a23de069a3e6de5aab66a620de88f110d0b7cb09",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] dev group: pytest>=8 (replaced by the harness pin pytest==9.1.1), pytest-benchmark>=5, typing-extensions. The optional hyperscan and google-re2 extras are not installed; their backend tests are the 786 skips ('No module named re2/hyperscan'). tox runs 'python -m unittest discover tests/'; the same test files are collected by pytest. No [tool.pytest] config."
+ },
+ {
+  "name": "pint",
+  "url": "https://github.com/hgrecco/pint",
+  "commit": "d58c44249d53438fd0a2a859a11fd63fedc62a78",
+  "install": [
+   "-e",
+   ".[test]"
+  ],
+  "python": "3.13",
+  "notes": "test extra from pyproject (pytest, pytest-cov, pytest-benchmark)."
+ },
+ {
+  "name": "pluggy",
+  "url": "https://github.com/pytest-dev/pluggy",
+  "commit": "20950ae1a494ce2f0bfce5d821e10a0b1cc2b82b",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "testing"
+  ],
+  "python": "3.13",
+  "notes": "testing group. Matches."
+ },
+ {
+  "name": "Pygments",
+  "url": "https://github.com/pygments/pygments",
+  "commit": "156d85fdd18d34427fe893527e71da91dcfb0eb5",
+  "install": [
+   "-e",
+   ".",
+   "pytest-cov",
+   "wcag-contrast-ratio"
+  ],
+  "notes": "Lowest priority (baseline excluded). Latest default-branch commit dated on or before 2026-10-22. Test deps from the [testenv] of tox.ini (pytest, pytest-cov, pytest-randomly, wcag-contrast-ratio). pytest-randomly is omitted because the harness runs with -p no:randomly.",
+  "python": "3.13"
+ },
+ {
+  "name": "pyrsistent",
+  "url": "https://github.com/tobgu/pyrsistent",
+  "commit": "0c0b7aec8cd25b1d2d8ba07b10acdefd0f38f2c7",
+  "install": [
+   ".",
+   "hypothesis",
+   "typing_extensions"
+  ],
+  "pre": [
+   "uv pip uninstall -q --python .venv/bin/python pyrsistent || true"
+  ],
+  "notes": "Test deps from the [testenv] of tox.ini (pytest, hypothesis, typing_extensions). requirements.txt is a developer file (Sphinx, psutil==5.7.0, pyperform) and is not used. Installed non-editable, as tox does (tox does not set usedevelop), because the editable install did not build the pvectorc C extension and 101 C-extension tests skipped. The pre step removes any earlier editable install.",
+  "python": "3.13"
+ },
+ {
+  "name": "pytest-testmon",
+  "url": "https://github.com/tarpas/pytest-testmon",
+  "commit": "dccc58d2ed8edec98096ff1974acb7c07d3e3482",
+  "install": [
+   "-e",
+   ".",
+   "pytest-mock",
+   "coverage<8",
+   "pytest-cov>=7,<8"
+  ],
+  "python": "3.13",
+  "notes": "Test deps from tox.ini [testenv] deps (pytest-mock, coverage<8, pytest-cov 7 env). No test extra declared."
+ },
+ {
+  "name": "python-dotenv",
+  "url": "https://github.com/theskumar/python-dotenv",
+  "commit": "0b2880591780a426b0551436f47a17e7a76d954f",
+  "install": [
+   "-e",
+   ".",
+   "click",
+   "pytest-cov"
+  ],
+  "python": "3.13",
+  "notes": "tox.ini [testenv] deps are pytest, pytest-cov, click, and ipython on py310-py314. click is installed (tests/conftest.py imports click.testing). ipython is NOT installed: with it, tests/test_ipython.py runs its 4 tests and the expected 280 passed / 5 skipped does not match (284 passed / 4 skipped). Without IPython, that module's importorskip skips it as one skip, which gives 280 passed / 5 skipped. Stock run from the checkout root with no --cov. Permission-based skips are root-dependent (the run is as root). Note: the 'dotenv' console script must come from the venv; the harness prepends .venv/bin to PATH."
+ },
+ {
+  "name": "python-semver",
+  "url": "https://github.com/python-semver/python-semver",
+  "commit": "bcd151fa63df3053b9f30e698e9ae1020187be1a",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "python": "3.13",
+  "notes": "test group (pytest<=9.1.1 is satisfied by the harness pin). Matches."
+ },
+ {
+  "name": "Requests",
+  "url": "https://github.com/psf/requests",
+  "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+  "install": [
+   "-e",
+   ".[socks]",
+   "-r",
+   "requirements-dev.txt"
+  ],
+  "notes": "requirements-dev.txt (pytest>=2.8,<10, pytest-httpbin==2.1.0, httpbin, trustme, pytest-cov, wheel) plus the socks extra, as tox does. pytest config sets addopts --doctest-modules and testpaths=tests. The 4 failures and 1 xfail are part of the expected result; the run needs network for some tests, so counts may vary slightly.",
+  "python": "3.13"
+ },
+ {
+  "name": "responses",
+  "url": "https://github.com/getsentry/responses",
+  "commit": "e68019c21a2d8ff0ab48484d4d6f1d81a3fc100b",
+  "install": [
+   "-e",
+   ".[tests]"
+  ],
+  "python": "3.13",
+  "notes": "tests extra from pyproject (tox [testenv] extras = tests)."
+ },
+ {
+  "name": "Rich",
+  "url": "https://github.com/Textualize/rich",
+  "commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+  "install": [
+   "-e",
+   ".",
+   "attrs",
+   "typing-extensions",
+   "pytest-cov",
+   "pygments==2.19.2",
+   "markdown-it-py==3.0.0"
+  ],
+  "python": "3.13",
+  "env": {
+   "TERM": "unknown"
+  },
+  "notes": "Poetry project: test-relevant dev dependencies are listed explicitly (attrs, typing-extensions, pytest-cov); pytest is the harness pin 9.1.1 rather than the project's ^7 range. Pygments and markdown-it-py use the versions from the pinned checkout's poetry.lock because its rendered-output expectations depend on them. TERM=unknown matches the Makefile test target. Lint tools are omitted. The subprocess broken-pipe test can vary with scheduling."
+ },
+ {
+  "name": "schema",
+  "url": "https://github.com/keleshev/schema",
+  "commit": "310a1239b62f500284ce3bd91b7dabf70467f23e",
+  "install": [
+   "mypy"
+  ],
+  "python": "3.13",
+  "notes": "mypy only, as CI (pip install pytest mypy); no test extras declared. Matches."
+ },
+ {
+  "name": "sortedcontainers",
+  "url": "https://github.com/grantjenks/python-sortedcontainers",
+  "commit": "3ac358631f58c1347f1d6d2d92784117db0f38ed",
+  "install": [
+   "-e",
+   ".",
+   "pytest-cov"
+  ],
+  "notes": "Test deps from the [testenv] deps of tox.ini (pytest, pytest-cov). requirements.txt is a developer file (scipy, matplotlib, sphinx, and others) and is not used. Config comes from the [pytest] section of tox.ini (pyproject has no pytest table), which adds --doctest-modules and --doctest-glob '*.rst'. tox also sets PY_IGNORE_IMPORTMISMATCH=1, which this recipe does not set.",
+  "python": "3.13"
+ },
+ {
+  "name": "soupsieve",
+  "url": "https://github.com/facelessuser/soupsieve",
+  "commit": "b0de0e6af90f15ba449d61eb2787a62f45d16344",
+  "install": [
+   "-e",
+   ".",
+   "pytest-cov",
+   "coverage",
+   "beautifulsoup4",
+   "lxml",
+   "html5lib"
+  ],
+  "python": "3.13",
+  "notes": "No test extra; deps from [tool.hatch.envs.dev] in pyproject (pytest omitted, harness pins it)."
+ },
+ {
+  "name": "Starlette",
+  "url": "https://github.com/encode/starlette",
+  "commit": "dc20b216f065af3a487722141da9a29dcac388d1",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] dev group (starlette[full] extras, httpx2, blockbuster, coverage, mypy, opentelemetry-sdk, pytest-codspeed, pytest>=9.1.1, trio, twine, ruff, types-PyYAML, and more; the group includes lint and release tools that the test run does not use). Project pytest config: -rXs --strict-config --strict-markers, filterwarnings=error."
+ },
+ {
+  "name": "structlog",
+  "url": "https://github.com/hynek/structlog",
+  "commit": "19c4f21059e853114efa7a93b6e675d93bf7934e",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] tests group: pytest-asyncio, pytest-randomly (disabled by the harness with -p no:randomly), pytest (replaced by the harness pin pytest==9.1.1), simplejson, time-machine. Project pytest config: --strict-markers --strict-config --import-mode=importlib, asyncio_mode=auto."
+ },
+ {
+  "name": "tabulate",
+  "url": "https://github.com/astanin/python-tabulate",
+  "commit": "268615a5c27dc40e5c22454c07b44d5c50410da0",
+  "install": [
+   "-e",
+   ".[widechars]",
+   "numpy",
+   "pandas"
+  ],
+  "python": "3.13",
+  "notes": "widechars extra plus numpy and pandas, as the project CI job (pip install pytest pytest-cov numpy pandas wcwidth). Without numpy, pandas and wcwidth, 60 tests skip. Matches."
+ },
+ {
+  "name": "termcolor",
+  "url": "https://github.com/termcolor/termcolor",
+  "commit": "c7d0b8e8a42f417ec0c07fd846138b0a19b24d36",
+  "install": [
+   "-e",
+   ".[tests]"
+  ],
+  "notes": "Test extra from pyproject (pytest>=9, pytest-codspeed, pytest-cov). [tool.pytest] sets minversion 9.0 and testpaths=tests.",
+  "python": "3.13"
+ },
+ {
+  "name": "tomli",
+  "url": "https://github.com/hukkin/tomli",
+  "commit": "43a86ade8b795c6ef9b4ec53372a607cd1ed426f",
+  "install": [
+   "-e",
+   "."
+  ],
+  "python": "3.13",
+  "notes": "No test deps declared in pyproject; tests are plain pytest-compatible modules."
+ },
+ {
+  "name": "tomlkit",
+  "url": "https://github.com/sdispater/tomlkit",
+  "commit": "eddd27e43a62fe58707c311bfad2f52e72493f53",
+  "pre": [
+   "git submodule update --init tests/toml-test"
+  ],
+  "install": [
+   "-e",
+   ".",
+   "PyYAML~=6.0"
+  ],
+  "python": "3.13",
+  "notes": "EXCLUDED baseline. Latest default-branch commit on or before 2026-10-22 (committed 2026-10-16). The dev group pins pytest~=7.2, which conflicts with the harness pytest 9.1.1 pin; only PyYAML is taken from the group. tests/toml-test is a git submodule, fetched in pre."
+ },
+ {
+  "name": "toolz",
+  "url": "https://github.com/pytoolz/toolz",
+  "commit": "451af60dec590a6010e2babdbf391ea8f815122f",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] test group: coverage, pycodestyle, pytest (replaced by the harness pin pytest==9.1.1). tox.ini runs 'pytest' with dependency_groups=test. Project pytest config: testpaths=toolz, filterwarnings=error."
+ },
+ {
+  "name": "tqdm",
+  "url": "https://github.com/tqdm/tqdm",
+  "commit": "9cf5a12b1f955468a17f0ba3c59092b23e4258ac",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   ".meta/requirements-test.txt"
+  ],
+  "python": "3.13",
+  "notes": ".meta/requirements-test.txt (the project's test requirements; includes a git+ nbval line). Matches."
+ },
+ {
+  "name": "tri.declarative",
+  "url": "https://github.com/TriOptima/tri.declarative",
+  "commit": "0e95ff0cbf1a565d191645fd9bd8b968894b385c",
+  "install": [
+   "-e",
+   ".",
+   "beautifulsoup4==4.7.1"
+  ],
+  "pytest_pinned_by_project": false,
+  "notes": "test_requirements.txt pins pytest==4.3.1, which does not run on CPython 3.13 and is not the reference (the expected result came from pytest 9.1.1). This recipe installs only its beautifulsoup4==4.7.1 pin and lets the harness pin pytest 9.1.1. setup.cfg [tool:pytest] adds --junitxml=testreport.xml --strict -r fEsxXw, so the run writes testreport.xml in the checkout. The 1 failure is part of the expected result.",
+  "python": "3.13"
+ },
+ {
+  "name": "tri.struct",
+  "url": "https://github.com/TriOptima/tri.struct",
+  "commit": "8915fc252ed430b21eada2e40b8b06a40da06992",
+  "install": [
+   "-e",
+   "."
+  ],
+  "python": "3.13",
+  "notes": "Excluded in seed-1 (no stock baseline). Latest default-branch (master) commit on or before 2026-10-22 is 8915fc25, 2021-02-01 (Release); the repo has no later commits. test_requirements.txt pins pytest==5.0.1 (old); the harness pin pytest 9.1.1 is used instead. setup.cfg has [tool:pytest] addopts '--junitxml=testreport.xml --strict -r fEsxXw'. RESULT: NOT REPRODUCED, stock pytest segfaults (exit -11) in the built C extension: tri_struct._cstruct, in tests/test_struct.py::test_missing_method (after 37 tests). With the .so moved aside (pure-Python import), that test passes, so the crash is the C extension on CPython 3.13. Not chased further per the give-up rule."
+ },
+ {
+  "name": "typeguard",
+  "url": "https://github.com/agronholm/typeguard",
+  "commit": "cb8cee7a17af49498ad2465bbbdf8bfa8bf41a53",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "test"
+  ],
+  "python": "3.13",
+  "notes": "test dependency group from pyproject (coverage, pytest, mypy)."
+ },
+ {
+  "name": "typer",
+  "url": "https://github.com/fastapi/typer",
+  "commit": "a5882dedf0bc7a46cd861fdfca020f88519e0f21",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests"
+  ],
+  "python": "3.13",
+  "notes": "Test deps are the [dependency-groups] tests group (coverage, mypy, ty, pytest>=9 (harness pin pytest==9.1.1 used), pytest-cov, pytest-sugar, pytest-xdist, rich, ruff, shellingham); pytest-sugar and pytest-xdist are installed but not used (no -n). env _TYPER_FORCE_DISABLE_TERMINAL=1 (from scripts/test.sh) is needed; without it 5 tests fail (rich wraps the Error panel, and the root user makes the permission tests differ). The expected run's single failure is tests/test_types_file.py::test_file_error ('unknown error' is not in the output); it fails with this env and passes with TERMINAL_WIDTH=3000. The full scripts/test.sh env (TERMINAL_WIDTH=3000 plus this) gives 0 failures instead. scripts/test.sh also sets _TYPER_RUN_INSTALL_COMPLETION_TESTS=1 and --numprocesses=auto, which are not used here.",
+  "env": {
+   "_TYPER_FORCE_DISABLE_TERMINAL": "1"
+  }
+ },
+ {
+  "name": "tzlocal",
+  "url": "https://github.com/regebro/tzlocal",
+  "commit": "b5349f69d0852e75aa66bb3a32d30f7f89d8b266",
+  "install": [
+   "-e",
+   ".[testing]"
+  ],
+  "python": "3.13",
+  "notes": "testing extra. Matches."
+ },
+ {
+  "name": "urllib3",
+  "url": "https://github.com/urllib3/urllib3",
+  "commit": "a37bc93b65d6bcf00d3dc43d966bab6bd130ecd8",
+  "install": [
+   ".[socks,brotli,zstd,h2]",
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "noxfile: uv sync --group dev --extra socks,brotli,zstd,h2. Installed non-editable: the hatch-vcs generated urllib3/_version.py is missing from an editable install. Failures match (11 failed, 1 error). Passed/skipped/xfailed do not: 2476/317/4 here vs 2181/614/2 expected. The totals match (2809 items). Not explained; the skip split depends on the environment (OpenSSL TLSv1 and TLSv1.1 tests skip 126 each here, IPv6, and the requires_network route check)."
+ },
+ {
+  "name": "vcrpy",
+  "url": "https://github.com/kevin1024/vcrpy",
+  "commit": "13904ec42934d610d05fd6af9a0f44a58934d71d",
+  "install": [
+   "-e",
+   ".[tests]"
+  ],
+  "notes": "Test deps are the tests extra (aiohttp, httpbin, pytest-aiohttp, pytest-httpbin, requests, urllib3, and others). runtests.sh sets REQUESTS_CA_BUNDLE from pytest_httpbin.certs; this recipe does not, and the expected 49 failures come from the stock run as recorded. Network-dependent tests may vary slightly.",
+  "python": "3.13"
+ },
+ {
+  "name": "voluptuous",
+  "url": "https://github.com/alecthomas/voluptuous",
+  "commit": "44593ce7c330faf9418252c4b5448f4736144a7f",
+  "install": [
+   "-e",
+   ".",
+   "pytest-cov"
+  ],
+  "notes": "Test deps from the [testenv] deps of tox.ini (pytest, pytest-cov, coverage). Tests live under voluptuous/tests/ and are collected from the root with no extra args.",
+  "python": "3.13"
+ },
+ {
+  "name": "waitress",
+  "url": "https://github.com/Pylons/waitress",
+  "commit": "2b43237e9caa66f906d0f652f2519cc79ef969a5",
+  "install": [
+   "-e",
+   ".[testing]"
+  ],
+  "python": "3.13",
+  "notes": "testing extra from pyproject (tox [testenv] extras = testing)."
+ },
+ {
+  "name": "wcwidth",
+  "url": "https://github.com/jquast/wcwidth",
+  "commit": "d137ffb846aaca92615491f73d7cfda2076d9d2e",
+  "pre": [
+   "grep -v '^pytest==' requirements-tests39.txt > .venv/requirements-tests39-nopytest.txt",
+   "uv pip install -q --python .venv/bin/python setuptools",
+   "CIBUILDWHEEL=1 .venv/bin/python setup.py build_ext --inplace"
+  ],
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   ".venv/requirements-tests39-nopytest.txt"
+  ],
+  "python": "3.13",
+  "env": {
+   "TERM": "",
+   "TERM_PROGRAM": ""
+  },
+  "notes": "tox.ini requires requirements-tests39.txt and setuptools, and builds the C extension in place before tests so imports from the checkout use it. The build needs a C compiler and CPython development headers; upstream CIBUILDWHEEL=1 makes a missing extension a preparation failure. The pytest==8.4.2 requirement is filtered into .venv/requirements-tests39-nopytest.txt so the harness uses pytest==9.1.1. TERM and TERM_PROGRAM are empty as in tox. Other test dependency pins are retained."
+ },
+ {
+  "name": "Werkzeug",
+  "url": "https://github.com/pallets/werkzeug",
+  "commit": "665e760ca6325a348ce03e5cf780b17e4be01848",
+  "install": [
+   "-e",
+   ".",
+   "--group",
+   "tests",
+   "watchdog==6.0.0"
+  ],
+  "python": "3.13",
+  "notes": "The tests group includes watchdog. Pin watchdog 6.0.0 from the checkout's uv.lock: watchdog 7 changes pattern matching for absolute paths, so the watchdog reloader test waits indefinitely for a change event."
+ },
+ {
+  "name": "wrapt",
+  "url": "https://github.com/GrahamDumpleton/wrapt",
+  "commit": "6b4e844950213118b19e613248d2bc9469eb731e",
+  "install": [
+   "--group",
+   "dev"
+  ],
+  "python": "3.13",
+  "notes": "C extension built via a non-editable pre install with WRAPT_INSTALL_EXTENSIONS=true. An editable install leaves _wrappers .so unbuilt, which gives 1409 passed, 8 skipped. The harness passes env only to the test run, not to install, hence the pre step. The dev group supplies pytest and setuptools.",
+  "pre": [
+   "WRAPT_INSTALL_EXTENSIONS=true uv pip install -q --python .venv/bin/python --reinstall --no-cache --no-deps ."
+  ]
+ },
+ {
+  "name": "wsproto",
+  "url": "https://github.com/python-hyper/wsproto",
+  "commit": "5e0685d0740ec30716897442f336de1118f5f40a",
+  "install": [
+   "-e",
+   ".",
+   "hypothesis>=6.119.4,<7",
+   "pytest-cov>=6.0.0,<7"
+  ],
+  "notes": "The project's testing group pins pytest>=8.3.3,<9, which conflicts with the pytest 9.1.1 the harness pins, so the group is not installed; the test libraries it lists (hypothesis, pytest-cov) are installed with their ranges. pytest-xdist from the group is omitted because the harness does not use -n.",
+  "python": "3.13"
+ },
+ {
+  "name": "yarl",
+  "url": "https://github.com/aio-libs/yarl",
+  "commit": "5f663e9a0a89ab98a36037284153112d722c58a3",
+  "install": [
+   "-e",
+   ".",
+   "-r",
+   "requirements/codspeed.txt"
+  ],
+  "python": "3.13",
+  "pytest_args": [
+   "-n",
+   "0"
+  ],
+  "notes": "requirements/codspeed.txt (-r test.txt plus pytest-codspeed==5.0.3) is the test set: test.txt is CI's 'uv pip install -r requirements/test.txt' (pytest==9.1.1, pytest-cov, pytest-xdist, cython, multidict, propcache, expandvars, hypothesis, pydantic). Installing only test.txt leaves 131 benchmark tests skipped ('pytest-codspeed needs to be installed'), which gives 3331 passed, 131 skipped, 55 xfailed. pytest.ini addopts include --numprocesses=auto (xdist); pytest_args ['-n','0'] keep the run in-process on this shared 4-core machine. The '-e .' build compiles yarl/_quoting_c (Cython) in-tree, and the C quoter tests run and pass (collection fails without that module)."
+ }
+]

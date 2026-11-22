@@ -1,0 +1,9 @@
+flowchart TD
+    Database["SQLite data"] --> Data["CoverageData handle"]
+    Collector["Collector snapshot"] --> Data
+    Data --> Model["Report model"]
+    Data -.->|"mutable API or file reporter"| Views["Python coverage views"]
+    Views -.-> Model
+    Model --> Renderer["Renderer"]
+    Renderer --> Files["Atomic file replacement"]
+    Renderer --> Streams["Python output streams"]

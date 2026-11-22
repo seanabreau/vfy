@@ -1,0 +1,27 @@
+import unittest
+import pytest
+from conftest import trace
+
+
+class ExpectedSetupError(unittest.TestCase):
+    def setUp(self):
+        raise ValueError("expectedFailure-does-not-cover-setUp")
+
+    @unittest.expectedFailure
+    def test_body(self):
+        self.fail("must-not-run")
+
+
+class ExpectedTeardownError(unittest.TestCase):
+    def tearDown(self):
+        raise ValueError("expectedFailure-does-not-cover-tearDown")
+
+    @unittest.expectedFailure
+    def test_body(self):
+        self.fail("expected-body-failure-before-teardown-error")
+
+
+class ParametrizedMethod(unittest.TestCase):
+    @pytest.mark.parametrize("number", [1, 2])
+    def test_parameter(self, number):
+        trace("must-not-inject-parametrize", number=number)

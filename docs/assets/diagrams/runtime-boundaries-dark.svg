@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="370" viewBox="0 0 600 370" role="img" aria-labelledby="title desc">
+<title id="title">Runtime boundaries</title>
+<desc id="desc">Batched Python API and pytest calls and direct CPython monitoring events enter the vfy native Rust extension. It calls vfy-core and, only for configured collectors, Python plug-ins.</desc>
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--wire)"/></marker>
+  <marker id="arrow-hot" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--accent)"/></marker>
+</defs>
+<style>:root{--ink:#f4f1ee;--muted:#c2bcc5;--rule:#68616d;--surface:#302a34;--wire:#b6adb9;--core:#3c3142;--core-text:#f8f5f1;--accent:#ff965c}
+
+.plate{fill:var(--surface)}
+.slab{fill:var(--core)}
+.gate{fill:var(--surface);stroke:var(--accent);stroke-width:1.6}
+.region-rule{stroke:var(--core-text);stroke-width:1;opacity:.32}
+.ink{fill:var(--ink)}.muted{fill:var(--muted)}.on-slab{fill:var(--core-text)}
+.orange{fill:var(--accent)}
+.wire{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-linecap:round}
+.hot{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round}
+.python{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-dasharray:5 5;stroke-linecap:round}
+.label{font:600 23px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.sub{font:400 18px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.small{font:600 17px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.code{font:600 25px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+.code-small{font:600 22px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+</style>
+
+<!-- One dark field encodes Rust ownership; the dashed route leaves it for configured Python plug-ins. -->
+<rect class="plate" x="20" y="18" width="260" height="66" rx="5"/>
+<text class="label ink" x="36" y="48">Python API + pytest</text>
+<text class="sub muted" x="36" y="72">batched calls</text>
+<rect class="plate" x="320" y="18" width="260" height="66" rx="5"/>
+<text class="label ink" x="336" y="48">CPython monitoring</text>
+<text class="sub muted" x="336" y="72">direct events</text>
+
+<rect class="slab" x="20" y="138" width="330" height="207" rx="7"/>
+<text class="sub on-slab" x="44" y="166">Rust runtime</text>
+<path class="region-rule" d="M44 254 H326"/>
+<path class="wire" d="M150 89 C150 119 170 126 170 175" marker-end="url(#arrow)"/>
+<path class="hot" d="M450 89 C450 118 270 121 270 175" marker-end="url(#arrow-hot)"/>
+<path class="hot" d="M185 260 L185 282" marker-end="url(#arrow-hot)"/>
+<path class="python" d="M315 219 C362 219 463 229 463 268" marker-end="url(#arrow)"/>
+<text class="code on-slab" x="44" y="208">vfy._native</text>
+<text class="sub on-slab" x="44" y="235">extension boundary</text>
+<text class="code-small on-slab" x="44" y="313">vfy-core</text>
+<rect class="plate" x="370" y="278" width="210" height="67" rx="5"/>
+<text class="label ink" x="385" y="305">Python plug-ins</text>
+<text class="sub muted" x="385" y="329">configured collector</text>
+
+</svg>

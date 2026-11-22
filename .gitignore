@@ -1,0 +1,16 @@
+/target/
+/target/benchmarks/
+/.pytest_cache/
+/.ruff_cache/
+/.venv/
+/.coverage
+/.coverage.*
+/.vfy/
+/coverage.json
+/coverage.xml
+/dist/
+/build/
+/site/
+*.py[cod]
+*.so
+__pycache__/

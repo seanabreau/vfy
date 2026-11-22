@@ -1,0 +1,20 @@
+import unittest
+from conftest import trace
+
+
+class SubtestTransitions(unittest.TestCase):
+    def test_subtest_skip_only(self):
+        with self.subTest(value="skip"):
+            self.skipTest("only-subtest-skip")
+        trace("after-only-subtest-skip")
+
+    def test_parent_skip_after_failure(self):
+        with self.subTest(value="failure"):
+            self.fail("child-failure-before-parent-skip")
+        self.skipTest("parent-skip-after-child-failure")
+
+    def test_nested(self):
+        with self.subTest("outer", outer=1):
+            with self.subTest("inner", inner=2):
+                self.fail("nested-subtest-failure")
+            trace("after-nested-failure")

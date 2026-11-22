@@ -1,0 +1,23 @@
+# Shared runner and test dependencies for the pinned small-project adoption set.
+# Each project's source revision and test scope are pinned separately by the matrix.
+pytest==9.1.1
+pytest-xdist==3.8.0
+pytest-cov==7.1.0
+pytest-mock==3.15.1
+hypothesis==6.168.1
+cloudpickle==3.1.2
+pympler==1.1
+pretend==1.0.9
+tomli-w==1.2.0
+six==1.17.0
+freezegun==1.5.5
+mock==5.2.0
+click==8.5.0
+ipython==9.17.1
+pygments==2.21.0
+appdirs==1.4.4
+build==1.6.1
+setuptools==84.1.0
+filelock==4.2.1
+trove-classifiers==2026.9.21.13
+virtualenv==21.14.13

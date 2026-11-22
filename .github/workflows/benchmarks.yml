@@ -1,0 +1,174 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  criterion:
+    name: Criterion comparison (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_TARGET_DIR: target/vfy-benchmark-ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build and measure the exact base revision
+        id: base
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base_sha="$PULL_REQUEST_BASE_SHA"
+          if [ -z "$base_sha" ]; then
+            base_sha="$PUSH_BEFORE_SHA"
+          fi
+          if [ -z "$base_sha" ] || [ "$base_sha" = "0000000000000000000000000000000000000000" ]; then
+            base_sha="$(git rev-parse HEAD^)"
+          fi
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          git worktree add --detach "$RUNNER_TEMP/vfy-base" "$base_sha"
+          base_package=$(python3 - "$RUNNER_TEMP/vfy-base/Cargo.toml" <<'PY'
+          import json
+          import subprocess
+          import sys
+
+          metadata = json.loads(subprocess.check_output([
+              "cargo", "metadata", "--locked", "--no-deps", "--format-version", "1",
+              "--manifest-path", sys.argv[1],
+          ], text=True))
+          package, = (
+              package for package in metadata["packages"]
+              if {"engine", "evidence"} <= {
+                  target["name"] for target in package["targets"]
+                  if "bench" in target["kind"]
+              }
+          )
+          print(package["name"])
+          PY
+          )
+          for bench in engine evidence; do
+            cargo bench --locked \
+              --manifest-path "$RUNNER_TEMP/vfy-base/Cargo.toml" \
+              --package "$base_package" --bench "$bench" -- \
+              --noplot --save-baseline=base
+          done
+      - name: Record benchmark provenance
+        env:
+          BASE_COMMIT: ${{ steps.base.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CARGO_TARGET_DIR"
+          {
+            echo "base_commit=$BASE_COMMIT"
+            echo "candidate_commit=$(git rev-parse HEAD)"
+            echo "runner_os=$RUNNER_OS"
+            echo "runner_arch=$RUNNER_ARCH"
+            echo "runner_name=$RUNNER_NAME"
+            rustc -Vv
+            cargo -V
+            echo "criterion_sample_size_default=100"
+            echo "criterion_sample_size_overrides=engine/data_merge=50"
+            echo "criterion_warm_up_time_seconds=3"
+            echo "criterion_measurement_time_seconds=5"
+            echo "criterion_comparison=--baseline-lenient=base"
+          } > "$CARGO_TARGET_DIR/benchmark-provenance.txt"
+      - name: Compare the current revision with the base
+        run: |
+          set -euo pipefail
+          for bench in engine evidence; do
+            cargo bench --locked --package vfy-core --bench "$bench" -- \
+              --noplot --baseline-lenient=base
+          done
+      - name: Upload Criterion comparison
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: criterion-comparison
+          path: |
+            target/vfy-benchmark-ci/criterion
+            target/vfy-benchmark-ci/benchmark-provenance.txt
+          if-no-files-found: warn
+
+  codspeed:
+    name: CodSpeed Rust benchmarks (opt-in, advisory)
+    if: vars.CODSPEED_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # Authenticate benchmark uploads to CodSpeed using OIDC.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install cargo-codspeed
+        uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2.86.5
+        with:
+          tool: cargo-codspeed@5.0.1
+          fallback: none
+      - name: Build CodSpeed benchmark targets
+        run: >-
+          cargo codspeed build --locked --package vfy-core
+          --bench engine_codspeed --bench evidence_codspeed
+      - name: Run CodSpeed in simulation mode
+        uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
+        with:
+          mode: simulation
+          run: >-
+            cargo codspeed run --package vfy-core
+            --bench engine_codspeed --bench evidence_codspeed
+
+  mutation-boundary:
+    name: Pinned mutmut cache boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      MUTMUT_REVISION: cd2f73da310c3fc90cffcb3e6c768cdeac14e18c
+      MUTMUT_REPOSITORY: /tmp/mutmut
+      MUTMUT_EXECUTABLE: /tmp/mutmut/.venv/bin/mutmut
+      MUTMUT_BOUNDARY_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install locked benchmark dependencies
+        run: uv sync --locked --group dev --group benchmark
+      - name: Provision the pinned mutmut checkout
+        run: |
+          set -euo pipefail
+          rm -rf "$MUTMUT_REPOSITORY"
+          git clone --no-checkout https://github.com/boxed/mutmut.git "$MUTMUT_REPOSITORY"
+          git -C "$MUTMUT_REPOSITORY" checkout --detach "$MUTMUT_REVISION"
+          test "$(git -C "$MUTMUT_REPOSITORY" rev-parse HEAD)" = "$MUTMUT_REVISION"
+          env -u UV_PROJECT_ENVIRONMENT -u VIRTUAL_ENV \
+            uv venv "$MUTMUT_REPOSITORY/.venv" --python 3.12
+          env -u UV_PROJECT_ENVIRONMENT -u VIRTUAL_ENV \
+            uv sync --project "$MUTMUT_REPOSITORY" --frozen --no-dev \
+            --python "$MUTMUT_REPOSITORY/.venv/bin/python"
+      - name: Prove the pinned mutmut public command boundary
+        run: >-
+          uv run --no-sync pytest -q
+          tests/repository/test_benchmark_mutation.py
+          -k pinned_mutmut_named_and_unnamed_cached_commands_have_different_boundaries

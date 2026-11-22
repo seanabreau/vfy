@@ -1,0 +1,15 @@
+# Rich 9d8f9a372cc5916fd4781fec207ced7ddac2f08f .coveragerc, with
+# subprocess coverage enabled for both engines because the suite spawns Python.
+[run]
+patch = subprocess
+omit = rich/jupyter.py
+    rich/_windows.py
+    rich/_timer.py
+    rich/diagnose.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == "__main__":
+    @overload

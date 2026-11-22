@@ -1,0 +1,18 @@
+{
+  "description": "Prepare missing development environments in vfy worktrees.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/vfy-worktree-setup.sh\"",
+            "statusMessage": "Preparing vfy worktree environment",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

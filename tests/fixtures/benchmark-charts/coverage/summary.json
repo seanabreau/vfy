@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "charts": [
+    {
+      "kind": "coverage",
+      "title": "Synthetic chart",
+      "route": "Synthetic coverage comparison",
+      "context": "Illustrative fixture",
+      "reference": "pytest-cov",
+      "candidate": "vfy",
+      "rows": [
+        {
+          "project": "Rich",
+          "scope": "Synthetic test fixture",
+          "route": "Synthetic coverage comparison",
+          "reference_median_ms": 800,
+          "candidate_median_ms": 600,
+          "reference_samples": 15,
+          "candidate_samples": 15,
+          "warmups": 3,
+          "status": "publication",
+          "parity": "passed",
+          "source": "synthetic test fixture",
+          "baseline_median_ms": 300,
+          "baseline_samples": 15
+        },
+        {
+          "project": "attrs",
+          "scope": "Synthetic test fixture",
+          "route": "Synthetic coverage comparison",
+          "reference_median_ms": 1600,
+          "candidate_median_ms": 1200,
+          "reference_samples": 15,
+          "candidate_samples": 15,
+          "warmups": 3,
+          "status": "publication",
+          "parity": "passed",
+          "source": "synthetic test fixture",
+          "baseline_median_ms": 600,
+          "baseline_samples": 15
+        }
+      ]
+    }
+  ]
+}

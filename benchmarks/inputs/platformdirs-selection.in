@@ -1,0 +1,2 @@
+-r ../locks/platformdirs.txt
+pytest-testmon==2.2.0

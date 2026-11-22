@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="665" viewBox="0 0 600 665" role="img" aria-labelledby="title desc">
+<title id="title">The Rust handle boundary</title>
+<desc id="desc">SQLite data and a collector snapshot enter a shared CoverageData Rust handle. The solid path flows through the report model and renderer to files or Python output streams. A dashed optional path materializes Python coverage views for a mutable API or file reporter and rejoins the model.</desc>
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--wire)"/></marker>
+  <marker id="arrow-hot" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 8 4 0 8 2 4Z" fill="var(--accent)"/></marker>
+</defs>
+<style>:root{--ink:#f4f1ee;--muted:#c2bcc5;--rule:#68616d;--surface:#302a34;--wire:#b6adb9;--core:#3c3142;--core-text:#f8f5f1;--accent:#ff965c}
+
+.plate{fill:var(--surface)}
+.slab{fill:var(--core)}
+.gate{fill:var(--surface);stroke:var(--accent);stroke-width:1.6}
+.region-rule{stroke:var(--core-text);stroke-width:1;opacity:.32}
+.ink{fill:var(--ink)}.muted{fill:var(--muted)}.on-slab{fill:var(--core-text)}
+.orange{fill:var(--accent)}
+.wire{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-linecap:round}
+.hot{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round}
+.python{fill:none;stroke:var(--wire);stroke-width:1.6;stroke-dasharray:5 5;stroke-linecap:round}
+.label{font:600 23px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.sub{font:400 18px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.small{font:600 17px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',PingFang SC,Microsoft YaHei,Noto Sans CJK SC,sans-serif}
+.code{font:600 25px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+.code-small{font:600 22px ui-monospace,SFMono-Regular,Cascadia Code,DejaVu Sans Mono,monospace;letter-spacing:-.5px}
+</style>
+
+<!-- The solid dark column is Rust-owned. Dashed arrows leave and re-enter it only for Python coverage views. -->
+<rect class="plate" x="20" y="18" width="260" height="66" rx="5"/>
+<text class="label ink" x="36" y="48">SQLite data</text>
+<text class="sub muted" x="36" y="72">stored coverage</text>
+<rect class="plate" x="320" y="18" width="260" height="66" rx="5"/>
+<text class="label ink" x="336" y="48">Collector snapshot</text>
+<text class="sub muted" x="336" y="72">current observations</text>
+
+<rect class="slab" x="20" y="138" width="350" height="420" rx="7"/>
+<text class="sub on-slab" x="44" y="166">Rust</text>
+<path class="region-rule" d="M44 260 H346 M44 388 H346"/>
+<path class="wire" d="M150 89 C150 120 158 132 158 181" marker-end="url(#arrow)"/>
+<path class="wire" d="M450 89 C450 128 270 120 270 181" marker-end="url(#arrow)"/>
+<path class="hot" d="M180 270 L180 302" marker-end="url(#arrow-hot)"/>
+<path class="hot" d="M180 365 L180 420" marker-end="url(#arrow-hot)"/>
+<path class="python" d="M335 229 C379 229 473 254 473 297" marker-end="url(#arrow)"/>
+<path class="python" d="M398 342 C355 342 330 339 270 339" marker-end="url(#arrow)"/>
+<path class="hot" d="M180 468 L180 570" marker-end="url(#arrow-hot)"/>
+<path class="wire" d="M285 468 C335 468 460 495 460 570" marker-end="url(#arrow)"/>
+<text class="code on-slab" x="44" y="217">CoverageData</text>
+<text class="sub on-slab" x="44" y="245">shared Rust handle</text>
+<text class="label on-slab" x="44" y="348">Report model</text>
+<text class="label on-slab" x="44" y="463">Renderer</text>
+
+<rect class="plate" x="398" y="307" width="182" height="65" rx="5"/>
+<text class="label ink" x="409" y="334">Python views</text>
+<text class="sub muted" x="409" y="357">API / file reporter</text>
+<rect class="plate" x="20" y="575" width="260" height="76" rx="5"/>
+<text class="label ink" x="36" y="607">Atomic file</text>
+<text class="label ink" x="36" y="634">replacement</text>
+<rect class="plate" x="320" y="575" width="260" height="76" rx="5"/>
+<text class="label ink" x="336" y="621">Python streams</text>
+
+</svg>

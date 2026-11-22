@@ -1,0 +1,69 @@
+--- a/tests/test_console.py
++++ b/tests/test_console.py
+@@ -1012,15 +1012,16 @@
+         check = subprocess.run(cmd).returncode
+         if check != 0:
+             return  # Only test on suitable Unix platforms
+-    head_cmd = "head -1".split()
+-    proc1 = subprocess.Popen(rich_cmd, stdout=subprocess.PIPE)
+-    proc2 = subprocess.Popen(head_cmd, stdin=proc1.stdout, stdout=subprocess.PIPE)
+-    proc1.stdout.close()
+-    output, _ = proc2.communicate()
++    # Close the reader before launching Rich so pipe capacity and scheduling
++    # cannot let the complete demo finish before the consumer exits.
++    read_fd, write_fd = os.pipe()
++    os.close(read_fd)
++    try:
++        proc1 = subprocess.Popen(rich_cmd, stdout=write_fd)
++    finally:
++        os.close(write_fd)
+     proc1.wait()
+-    proc2.wait()
+     assert proc1.returncode == 1
+-    assert proc2.returncode == 0
+
+
+ def test_capture_and_record() -> None:
+--- a/tests/test_live.py
++++ b/tests/test_live.py
+@@ -1,5 +1,6 @@
+ # encoding=utf-8
+ import time
++from io import StringIO
+ from typing import Optional
+
+ # import pytest
+@@ -116,6 +117,8 @@
+ def test_growing_display_autorefresh() -> None:
+     """Test generating a table but using auto-refresh from threading"""
+     console = create_capture_console(height=5)
++    # Console's capture buffer is thread-local; contain background refreshes too.
++    console.file = StringIO()
+     console.begin_capture()
+     with Live(console=console, auto_refresh=True, vertical_overflow="visible") as live:
+         display = ""
+@@ -124,7 +127,7 @@
+             live.update(display)
+             time.sleep(0.2)
+
+-    # no way to truly test w/ multithreading, just make sure it doesn't crash
++    assert "Step 9" in console.end_capture()
+
+
+ def test_growing_display_console_redirect() -> None:
+--- a/tests/test_traceback.py
++++ b/tests/test_traceback.py
+@@ -267,10 +267,12 @@
+
+ def test_recursive():
+     def foo(n):
++        if n == 20:
++            raise RecursionError("deterministic recursion depth")
+         return bar(n)
+
+     def bar(n):
+-        return foo(n)
++        return foo(n + 1)
+
+     console = Console(width=100, file=io.StringIO())
+     try:

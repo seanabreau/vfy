@@ -1,0 +1,53 @@
+import unittest
+import pytest
+from conftest import trace
+
+
+@unittest.skip("whole-class-skip")
+class ClassSkipped(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        trace("must-not-setup-skipped-class")
+
+    def test_body(self):
+        trace("must-not-run-skipped-class")
+
+
+class OutcomeCases(unittest.TestCase):
+    def setUp(self):
+        trace("outcome-setUp", method=self._testMethodName)
+        self.addCleanup(trace, "outcome-cleanup", method=self._testMethodName)
+
+    def tearDown(self):
+        trace("outcome-tearDown", method=self._testMethodName)
+
+    @unittest.skip("method-skip")
+    def test_decorated_skip(self):
+        trace("must-not-decorated-skip")
+
+    def test_runtime_skip(self):
+        self.skipTest("runtime-skip")
+
+    @unittest.expectedFailure
+    def test_expected_failure(self):
+        self.fail("expected-body-failure")
+
+    @unittest.expectedFailure
+    def test_unexpected_success(self):
+        trace("unexpected-success-body")
+
+    @pytest.mark.xfail(reason="pytest-marked", strict=True)
+    def test_pytest_xfail(self):
+        self.fail("pytest-marked-failure")
+
+
+class SetupSkipped(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(trace, "setup-skip-cleanup")
+        self.skipTest("setup-runtime-skip")
+
+    def tearDown(self):
+        trace("must-not-teardown-after-setup-skip")
+
+    def test_body(self):
+        trace("must-not-run-after-setup-skip")

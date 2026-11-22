@@ -1,0 +1,40 @@
+:root {
+  --md-primary-fg-color: #171717;
+  --md-accent-fg-color: #e85d04;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.2rem;
+}
+
+/* Keep option and API names readable in tables; wide tables scroll on mobile. */
+.md-typeset table:not([class]) td code,
+.md-typeset table:not([class]) th code {
+  white-space: nowrap;
+  word-break: normal;
+}
+
+/* Architecture diagrams retain their labels and connectors at reading size. */
+.architecture-diagram {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.architecture-diagram img {
+  min-width: 600px;
+}
+
+.diagram-scroll-hint {
+  display: none;
+}
+
+@media screen and (max-width: 600px) {
+  .diagram-scroll-hint {
+    display: block;
+    color: var(--md-default-fg-color--light);
+    font-size: 0.8em;
+  }
+}

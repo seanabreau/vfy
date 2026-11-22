@@ -1,0 +1,8 @@
+flowchart TD
+    Catalog["Mutation catalog"] --> Eligible{"Safe collected-session swap?"}
+    Eligible -->|"yes"| Fork["Fork collected session"]
+    Eligible -->|"no"| Portable["Patch import in child"]
+    Fork --> Execution["Run tests"]
+    Portable --> Execution
+    Execution --> Result["Mutation result"]
+    Result --> Cache["Mutation cache"]

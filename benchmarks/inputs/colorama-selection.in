@@ -1,0 +1,5 @@
+-r ../../validation/pytest_runner/native-adoption-requirements.in
+coverage==7.16.2
+pytest-testmon==2.2.0
+hatchling
+editables

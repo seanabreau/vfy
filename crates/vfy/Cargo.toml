@@ -1,0 +1,41 @@
+[package]
+name = "vfy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internal crate: the vfy._native Python extension"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+extension-module = ["pyo3/extension-module", "vfy-pytest/extension-module"]
+
+[dependencies]
+indexmap.workspace = true
+vfy-core.workspace = true
+pyo3.workspace = true
+pep440_rs.workspace = true
+ruff_python_ast.workspace = true
+ruff_python_parser.workspace = true
+ruff_text_size.workspace = true
+rusqlite.workspace = true
+rustc-hash.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+toml.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+vfy-pytest = { path = "../vfy-pytest", version = "=0.0.1" }
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

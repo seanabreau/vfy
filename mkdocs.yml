@@ -1,0 +1,110 @@
+site_name: vfy
+site_description: A Python test runner and coverage tool, built in Rust. Run pytest-style tests, measure coverage, and rerun the tests your edits affect.
+site_author: vfy contributors
+site_url: https://vfy.neocline.com/
+repo_name: seanabreau/vfy
+repo_url: https://github.com/seanabreau/vfy
+
+theme:
+  name: material
+  custom_dir: overrides
+  logo: assets/logo.svg
+  favicon: assets/favicon.png
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Use light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Use dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Follow system theme
+  features:
+    - navigation.sections
+    - navigation.path
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.footer
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+    - search.share
+
+plugins:
+  - search
+
+nav:
+  - Overview: index.md
+  - Getting started:
+    - Installation: getting-started/installation.md
+    - Run tests: guides/run-tests.md
+    - Measure coverage: getting-started/quickstart.md
+    - Run affected tests: getting-started/selection.md
+  - Guides:
+    - Collect and report coverage: guides/collection.md
+    - CI: guides/ci.md
+    - Check your pytest suite: guides/native-adoption.md
+    - How selection works: guides/test-selection.md
+    - Test asyncio code: guides/asyncio.md
+    - Mutation testing: guides/mutation.md
+    - Decision coverage: guides/semantic.md
+  - Reference:
+    - Test execution: about/pytest.md
+    - CLI: reference/cli.md
+    - Configuration: reference/configuration.md
+    - Python API: reference/python-api.md
+    - Compatibility: about/compatibility.md
+    - Data files: reference/data-files.md
+  - Help:
+    - FAQ: help/faq.md
+    - Troubleshooting: help/troubleshooting.md
+  - Project:
+    - Changelog: https://github.com/seanabreau/vfy/blob/main/changelogs/0.0.x.md
+    - Benchmarks: about/benchmarks.md
+    - Architecture: about/architecture.md
+    - Contributing and testing: about/testing.md
+    - Native pytest testing: about/native-pytest-testing.md
+    - Upstream pytest corpus: about/pytest-test-suite.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - assets/extra.css
+
+copyright: Copyright &copy; vfy contributors
+
+strict: true
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn

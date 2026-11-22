@@ -1,0 +1,5 @@
+flowchart TD
+    API["Python API and pytest adapters"] -->|"batched calls"| Extension["vfy._native"]
+    CPython["CPython monitoring"] -->|"events"| Extension
+    Extension --> Core["vfy-core"]
+    Extension -.->|"configured collector"| Plugins["Python plug-ins"]

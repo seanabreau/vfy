@@ -1,0 +1,4 @@
+# Shared real-project coverage mode for both benchmark plug-ins.
+# The suites that launch Python children must measure the same child source.
+[run]
+patch = subprocess
