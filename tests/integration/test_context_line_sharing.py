@@ -23,7 +23,12 @@ def test_shared_context_line_sets_match_coverage_after_reentry_snapshot_and_rest
         "    return int(text)\n"
         "\n"
         "def describe(value):\n"
-        "    return f'value={value}'\n",
+        "    return f'value={value}'\n"
+        "\n"
+        "callbacks = {'value': lambda: 7}\n"
+        "\n"
+        "def empty():\n"
+        '    """This function has no explicit body."""\n',
     )
     project.write(
         "run.py",
@@ -35,6 +40,8 @@ def test_shared_context_line_sets_match_coverage_after_reentry_snapshot_and_rest
         "for index in range(20):\n"
         "    cov.switch_context(f'test_parse[{index}]')\n"
         "    subject.parse(index)\n"
+        "    subject.callbacks['value']()\n"
+        "    subject.empty()\n"
         "cov.switch_context('test_negative')\n"
         "subject.parse(-1)\n"
         "cov.get_data()\n"
