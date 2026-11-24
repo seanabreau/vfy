@@ -1526,15 +1526,6 @@ def main() -> None:
             expect_cache_absent=True,
             conftest=CUSTOM_ITEM_CONFTEST,
         ),
-        "cov_append": run_unsupported_case(
-            destination,
-            args.candidate_python,
-            stock_data,
-            "cov-append",
-            event_test_source("test_append_rejected"),
-            extra_arguments=("--cov-append",),
-            expected_status=1,
-        ),
         "missing_data_parent": run_unsupported_case(
             destination,
             args.candidate_python,

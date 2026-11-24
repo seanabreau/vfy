@@ -97,6 +97,9 @@ jobs:
     env:
       CARGO_TARGET_DIR: target/native-pytest/build
       PYTHONHASHSEED: "0"
+      # Runner images ship older patch releases; CPython 3.14.4 and 3.14.5 crash
+      # in json.dumps when a container is mutated during encoding.
+      UV_PYTHON_PREFERENCE: only-managed
       NATIVE_PYTHON_VERSION: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
