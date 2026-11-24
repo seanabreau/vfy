@@ -26,7 +26,14 @@ def test_staged_plugins_keep_verified_canonical_sources(tmp_path: Path) -> None:
             source = Path(file["source"])
             assert source.read_bytes() == derived
             sources.append(source.name)
-    assert len(sources) == 4
+    # Workflows load these modules with -p from the staged package.
+    assert sorted(sources) == [
+        "benchmark_plugins.py",
+        "datasette_diagnostic_plugin.py",
+        "native_reference_coverage.py",
+        "outcome_plugin.py",
+        "rich_clock_plugin.py",
+    ]
     assert stage_plugins(destination) == destination
     assert receipt_path.read_bytes() == receipt_bytes
 

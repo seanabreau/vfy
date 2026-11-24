@@ -353,7 +353,7 @@ jobs:
           "$python" -m vfy coverage run vfy_only_check.py
           "$python" -m vfy coverage report --include=vfy_only_check.py --fail-under=100
       - name: Differential and round-trip tests against the installed wheel
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -n auto
       - name: Asyncio compatibility with pinned pytest
         run: |
           uv pip uninstall pytest-asyncio
@@ -445,7 +445,7 @@ jobs:
           uv run --no-sync python scripts/smoke_wheel.py
           uv run --no-sync python scripts/check_wheel_typing.py
       - name: Differential and round-trip tests against the installed wheel
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -n auto
       - name: Check minimum xdist with pinned pytest
         shell: bash
         run: |
