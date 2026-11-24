@@ -1384,8 +1384,8 @@ def test_relevant_tests_are_ordered_by_recorded_duration(tmp_path: Path) -> None
     _project(
         tmp_path,
         "def classify(value):\n    return value >= 2\n",
-        "from app import classify\n\n"
-        "def test_a_slow():\n    assert classify(2) is True\n\n"
+        "import time\n\nfrom app import classify\n\n"
+        "def test_a_slow():\n    time.sleep(0.05)\n    assert classify(2) is True\n\n"
         "def test_b_fast():\n    assert classify(2) is True\n",
     )
     history = tmp_path / ".vfy" / "test-history.json"
@@ -1401,10 +1401,6 @@ def test_relevant_tests_are_ordered_by_recorded_duration(tmp_path: Path) -> None
         env=_environment(),
     )
     baseline.expect(0)
-    recorded = json.loads(history.read_text(encoding="utf-8"))
-    recorded["tests"]["tests/test_app.py::test_a_slow"]["duration_ms"] = 100.0
-    recorded["tests"]["tests/test_app.py::test_b_fast"]["duration_ms"] = 1.0
-    history.write_text(json.dumps(recorded), encoding="utf-8")
 
     completed = _mutation(
         tmp_path, "--operator", "comparison_boundary", "--no-cache", "--history", str(history)
