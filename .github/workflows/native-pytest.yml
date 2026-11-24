@@ -1,44 +1,10 @@
 name: Native pytest corpus gate
 
+# Pull requests skip this matrix: its eight jobs hold scarce macOS runners for
+# about 30 minutes each while the required wheel tests wait for them.
 on:
   push:
     branches: [main]
-    paths:
-      - .github/workflows/native-pytest.yml
-      - crates/vfy/**
-      - crates/vfy-core/**
-      - crates/vfy-pytest/**
-      - python/vfy/**
-      - validation/pytest_runner/**
-      - docs/about/pytest-test-identity.json
-      - docs/about/pytest-test-policy.json
-      - docs/about/pytest-test-suite.md
-      - Cargo.toml
-      - Cargo.lock
-      - pyproject.toml
-      - uv.lock
-      - rust-toolchain.toml
-      - benchmarks/benchmark_harness.py
-      - benchmarks/project_manifest.py
-      - benchmarks/locks/rich.txt
-      - tests/repository/test_native_project.py
-      - scripts/process_tree.py
-      - scripts/pytest_environment_lock.py
-      - scripts/pytest_execution_accounting.py
-      - scripts/pytest_execution_observations.py
-      - scripts/pytest_execution_probe.py
-      - scripts/pytest_execution_record.py
-      - scripts/pytest_corpus_*.py
-      - tests/repository/test_pytest_execution*.py
-      - tests/repository/test_pytest_corpus_classification.py
-      - tests/repository/test_pytest_corpus_inventory.py
-      - tests/repository/test_pytest_corpus_execution.py
-      - benchmarks/benchmark_provenance.py
-      - tests/repository/test_benchmark_protocol.py
-      - tests/repository/test_native_benchmark.py
-      - tests/integration/**
-      - tests/support/**
-  pull_request:
     paths:
       - .github/workflows/native-pytest.yml
       - crates/vfy/**
