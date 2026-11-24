@@ -354,8 +354,12 @@ jobs:
           printf 'print("measured")\n' > vfy_only_check.py
           "$python" -m vfy coverage run vfy_only_check.py
           "$python" -m vfy coverage report --include=vfy_only_check.py --fail-under=100
+      # Linux runners have 4 vCPUs. On 3-core macOS runners, xdist workers starve
+      # the suite's subprocess timing tests, so macOS runs the suite serially.
       - name: Differential and round-trip tests against the installed wheel
-        run: uv run --no-sync pytest -n auto
+        env:
+          PYTEST_WORKERS: ${{ runner.os == 'Linux' && 'auto' || '0' }}
+        run: uv run --no-sync pytest -n "$PYTEST_WORKERS"
       - name: Asyncio compatibility with pinned pytest
         run: |
           uv pip uninstall pytest-asyncio

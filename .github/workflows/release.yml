@@ -252,8 +252,12 @@ jobs:
         run: |
           uv sync --locked --group dev --group benchmark --no-install-project --python "$PYTHON_VERSION"
           uv pip install --reinstall --no-deps dist/*.whl
+      # Linux runners have 4 vCPUs. On 3-core macOS runners, xdist workers starve
+      # the suite's subprocess timing tests, so macOS runs the suite serially.
       - name: Run the complete suite against the installed release wheel
-        run: uv run --no-sync pytest -q -n auto
+        env:
+          PYTEST_WORKERS: ${{ runner.os == 'Linux' && 'auto' || '0' }}
+        run: uv run --no-sync pytest -q -n "$PYTEST_WORKERS"
       - name: Verify installed native typing declarations
         run: uv run --no-sync python scripts/check_wheel_typing.py
       - name: Check minimum xdist with pinned pytest
