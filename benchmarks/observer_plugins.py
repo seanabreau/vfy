@@ -16,6 +16,7 @@ _MODULES = (
     "native_reference_coverage.py",
     "rich_clock_plugin.py",
     "benchmark_plugins.py",
+    "datasette_diagnostic_plugin.py",
 )
 
 

@@ -67,7 +67,7 @@ jobs:
             --preparation-manifest "$PREPARED/artifacts/manifest.json" \
             --artifacts "$PREPARED/artifacts/projects" \
             --mode diagnostic
-      - name: Retain the known interpreter compatibility rejection
+      - name: Retain the documented parity rejection
         if: inputs.parity_policy == 'diagnostic'
         env:
           PROJECT: ${{ inputs.project }}
@@ -76,6 +76,10 @@ jobs:
         run: |
           PREPARED="$RUNNER_TEMP/vfy-ecosystem/$PROJECT/py$PYTHON"
           mkdir -p "$PREPARED/artifacts/projects"
+          PROJECT_ARGS=()
+          if [ "$PROJECT" = datasette ]; then
+            PROJECT_ARGS+=("--pytest-args=-p vfy_benchmark_plugins.datasette_diagnostic_plugin")
+          fi
           set +e
           uv run --no-sync python -m benchmarks validate projects \
             --project "$PROJECT" \
@@ -83,7 +87,7 @@ jobs:
             --python "$PREPARED/environment/bin/python" \
             --preparation-manifest "$PREPARED/artifacts/manifest.json" \
             --artifacts "$PREPARED/artifacts/projects" \
-            --mode diagnostic \
+            --mode diagnostic "${PROJECT_ARGS[@]}" \
             > "$PREPARED/artifacts/projects/validation.log" 2>&1
           STATUS=$?
           set -e
@@ -97,8 +101,17 @@ jobs:
             echo "diagnostic lane failed for an unrecognized reason"
             exit 1
           fi
-          printf '{"status":"expected_rejection","exit_code":%s,"reason":"%s"}\n' "$STATUS" "$EXPECTED_PATTERN" \
-            > "$PREPARED/artifacts/projects/expected-rejection.json"
+          uv run --no-sync python - "$STATUS" "$EXPECTED_PATTERN" \
+            > "$PREPARED/artifacts/projects/expected-rejection.json" <<'PY'
+          import json
+          import sys
+
+          print(json.dumps({
+              "status": "expected_rejection",
+              "exit_code": int(sys.argv[1]),
+              "reason": sys.argv[2],
+          }))
+          PY
       - name: Validate the stateful edit workflow protocol
         if: inputs.parity_policy == 'required' && (inputs.project == 'rich' || inputs.project == 'datasette')
         env:

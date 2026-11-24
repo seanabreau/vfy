@@ -691,7 +691,7 @@ def test_observed_stock_coverage_keeps_application_identity_with_missing_alias_t
     }
 
 
-def test_parity_validates_manifest_xml_reports_with_real_pytest_plugins(
+def test_multiphase_parity_regenerates_manifest_reports_after_append(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "project"
@@ -707,6 +707,7 @@ def test_parity_validates_manifest_xml_reports_with_real_pytest_plugins(
         tests=project.tests,
         environment=benchmark_environment(),
         artifacts=artifacts,
+        phases=("parallel", "serial"),
     )
 
     assert data["files"]

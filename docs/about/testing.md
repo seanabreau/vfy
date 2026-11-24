@@ -272,7 +272,7 @@ Its separate recorded-project matrix has these lanes:
 | Rich | 3.12, 3.13 | Require the parity comparison to pass |
 | Rich | 3.14 | Require a known schema-7 rejection |
 | Requests | 3.12, 3.13, 3.14 | Require the parity comparison to pass |
-| Datasette | 3.12 | Require a known report-generation or source-parsing rejection |
+| Datasette | 3.12 | Require a known report-generation, source-parsing, or measured-file rejection |
 
 The diagnostic lanes require a nonzero result matching their expected error;
 a passing diagnostic job does not establish successful parity. Jobs retain
@@ -280,6 +280,10 @@ reports, databases, resolved dependencies, logs, and semantic differences, and
 publish no timings. This configured matrix is separate from the
 [historical benchmarks](benchmarks.md); check the candidate's retained job
 results for execution evidence.
+
+Datasette's measured-file rejection requires `datasette/utils/shutil_backport.py`
+to be the only extra file in vfy's report. The pinned `.coveragerc` omits this
+file, but vfy measures it when a child process starts outside the project root.
 
 The workflow does not block releases. A case can become a required CI check
 after its expected behavior and comparison method are reviewed.
