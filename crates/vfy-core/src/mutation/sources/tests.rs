@@ -221,7 +221,18 @@ fn base_scope_uses_merge_base_and_current_paths_from_a_subdirectory() {
 #[test]
 fn source_filters_ignore_directory_names_above_the_project() {
     let directory = tempfile::tempdir().expect("temporary directory");
-    let project = directory.path().join("tests").join(".venv").join("project");
+    let real = directory.path().join("real");
+    std::fs::create_dir(&real).expect("real ancestor");
+    // Reach the project through a symlink, as macOS temporary paths do.
+    #[cfg(unix)]
+    let ancestor = {
+        let alias = directory.path().join("alias");
+        std::os::unix::fs::symlink(&real, &alias).expect("symlinked ancestor");
+        alias
+    };
+    #[cfg(not(unix))]
+    let ancestor = real;
+    let project = ancestor.join("tests").join(".venv").join("project");
     std::fs::create_dir_all(project.join("tests")).expect("project layout");
     std::fs::create_dir_all(project.join(".venv")).expect("environment layout");
     for name in [
@@ -234,7 +245,8 @@ fn source_filters_ignore_directory_names_above_the_project() {
     }
     let roots = [project.to_string_lossy().into_owned()];
     let found = super::mutation_sources_below(&roots, false, Some(&project));
-    assert_eq!(found, [project.join("module.py").to_string_lossy()]);
+    let module = crate::path::absolute_path(&project.join("module.py"));
+    assert_eq!(found, [module.to_string_lossy()]);
     let all = super::mutation_sources_below(&roots, true, Some(&project));
     assert_eq!(all.len(), 3, "{all:?}");
 }

@@ -115,6 +115,8 @@ fn mutation_sources_below(
     include_tests: bool,
     base: Option<&Path>,
 ) -> Vec<String> {
+    // Resolve the base like each file so symlinked ancestors still strip.
+    let base = base.map(absolute_path);
     let mut files = BTreeSet::new();
     for root in roots {
         let root = absolute_path(Path::new(root));
@@ -128,6 +130,7 @@ fn mutation_sources_below(
         .into_iter()
         .filter(|path| {
             let relative = base
+                .as_deref()
                 .and_then(|base| path.strip_prefix(base).ok())
                 .unwrap_or(path);
             !ignored(relative)
