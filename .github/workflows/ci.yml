@@ -117,7 +117,7 @@ jobs:
     needs: change-scope
     if: needs.change-scope.outputs.run_quality == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -142,7 +142,7 @@ jobs:
       - name: Rust tests and reviewed snapshots
         run: scripts/cargo-insta-test.sh --locked --workspace --no-default-features
       - name: Differential and round-trip tests
-        run: uv run pytest
+        run: uv run pytest -n auto
       - name: Native pytest-mock compatibility
         run: bash scripts/check_native_pytest_mock_versions.sh
       # XML output parity is tracked separately; this smoke covers terminal and JSON.
