@@ -421,7 +421,9 @@ fn final_cleanup_retry_retains_permanent_failed_ownership_and_all_errors() {
 fn darwin_reaped_group_must_be_absent_to_resolve_permission_error() {
     let denied = || io::Error::from(rustix::io::Errno::PERM);
     let absent = || Err(rustix::io::Errno::SRCH);
-    let err = confirm_group_absent(denied(), || Ok(true), absent).unwrap_err();
+    // A distant deadline keeps polling cases independent of runner speed.
+    let later = Instant::now() + Duration::from_mins(1);
+    let err = confirm_group_absent(denied(), later, || Ok(true), absent).unwrap_err();
     assert_eq!(
         err.raw_os_error(),
         Some(rustix::io::Errno::SRCH.raw_os_error())
@@ -429,6 +431,7 @@ fn darwin_reaped_group_must_be_absent_to_resolve_permission_error() {
     let mut probes = [Err(rustix::io::Errno::PERM), Ok(()), absent()].into_iter();
     let error = confirm_group_absent(
         denied(),
+        later,
         || group_leader_reaped(&mut None),
         || {
             probes
@@ -442,7 +445,8 @@ fn darwin_reaped_group_must_be_absent_to_resolve_permission_error() {
         Some(rustix::io::Errno::SRCH.raw_os_error())
     );
     let mut waits = [false, true].into_iter();
-    let error = confirm_group_absent(denied(), || Ok(waits.next().unwrap()), absent).unwrap_err();
+    let error =
+        confirm_group_absent(denied(), later, || Ok(waits.next().unwrap()), absent).unwrap_err();
     assert_eq!(
         error.raw_os_error(),
         Some(rustix::io::Errno::SRCH.raw_os_error())
@@ -452,20 +456,28 @@ fn darwin_reaped_group_must_be_absent_to_resolve_permission_error() {
         (true, Ok(())),
         (true, Err(rustix::io::Errno::PERM)),
     ] {
-        let err = confirm_group_absent(denied(), || Ok(reaped), || probe).unwrap_err();
+        // An expired deadline rejects these cases without waiting.
+        let err =
+            confirm_group_absent(denied(), Instant::now(), || Ok(reaped), || probe).unwrap_err();
         assert_eq!(
             err.raw_os_error(),
             Some(rustix::io::Errno::PERM.raw_os_error())
         );
     }
-    let error = confirm_group_absent(denied(), || Err(io::Error::other("wait failed")), absent)
-        .unwrap_err();
+    let error = confirm_group_absent(
+        denied(),
+        later,
+        || Err(io::Error::other("wait failed")),
+        absent,
+    )
+    .unwrap_err();
     assert_eq!(
         error.raw_os_error(),
         Some(rustix::io::Errno::PERM.raw_os_error())
     );
     let error = confirm_group_absent(
         io::Error::from(rustix::io::Errno::INVAL),
+        later,
         || panic!("must not reap"),
         || panic!("must not probe"),
     )
