@@ -520,6 +520,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def _vfy_stress_seed(request):
     cases = {
+        # The key-function examples call random() during membership tests.
+        "docs/introduction.rst::introduction.rst",
         "tests/test_stress_sortedlist.py::test_stress",
         "tests/test_stress_sortedkeylist.py::test_stress",
         "tests/test_stress_sortedset.py::test_stress",
@@ -559,8 +561,9 @@ def prepare_project(
                 "project": project.key,
                 "revision": revision,
                 "fixture_sha256": file_sha256(fixture),
-                "reason": "Seed each of the three random stress tests independently and restore "
-                "global random state; worker partitioning otherwise changes per-test coverage.",
+                "reason": "Seed the introduction doctest and the three random stress tests "
+                "independently and restore global random state; worker partitioning otherwise "
+                "changes per-test coverage.",
             },
         )
 
