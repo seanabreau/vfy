@@ -75,9 +75,11 @@ jobs:
           uv run --no-sync ty check --python-version 3.15
       - name: Rust formatting
         run: cargo fmt --check
+      # These tests read repository files only. The root conftest imports the
+      # installed vfy package, which this job does not build.
       - name: Architecture and repository tests
         run: >-
-          uv run --no-sync pytest -q
+          uv run --no-sync pytest -q --noconftest
           tests/repository/test_architecture.py
           tests/repository/test_ci_change_plan.py
           tests/repository/test_ci_results.py
