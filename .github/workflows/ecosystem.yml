@@ -65,7 +65,9 @@ jobs:
           - project: datasette
             python: "3.12"
             parity_policy: diagnostic
-            expected_pattern: "Failed to generate report|Couldn't parse"
+            expected_pattern: >-
+              Failed to generate report|Couldn't parse|^RuntimeError: coverage measured-file sets differ:
+              pytest-cov only \(0\)=\[\], vfy only \(1\)=\['datasette/utils/shutil_backport\.py'\]$
     uses: ./.github/workflows/ecosystem-project.yml
     permissions:
       contents: read

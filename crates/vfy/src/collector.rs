@@ -314,14 +314,21 @@ impl CollectorCore {
 
     /// Re-enable the locations retired in the previous context.
     ///
-    /// Local-event strategies retire only measured code-local events, so
-    /// reinstalling those code objects' masks restores what a global restart
-    /// would. Returns `false` when the strategy uses global events and the
-    /// caller must restart monitoring.
+    /// Reinstall local masks when that restores all retired events. Returns
+    /// `false` when the caller must restart monitoring.
     fn reactivate_retired_locations(&mut self, py: Python<'_>) -> PyResult<bool> {
         let Some(base_mask) = self.context_local_mask() else {
             return Ok(false);
         };
+        // On CPython 3.13+, toggling the local LINE mask does not restore
+        // disabled events on the first line of code such as a one-line lambda.
+        if self.strategy == CollectionStrategy::Lines
+            && !self.retired_in_context.is_empty()
+            && py.version_info() >= (3, 13)
+        {
+            self.retired_in_context.clear();
+            return Ok(false);
+        }
         let mut retired: Vec<usize> = self.retired_in_context.drain().collect();
         retired.sort_unstable();
         for code_id in retired {

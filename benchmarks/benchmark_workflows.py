@@ -45,6 +45,7 @@ from benchmarks.benchmark_projects import (
 from benchmarks.benchmark_provenance import prepared_project_provenance
 from benchmarks.observer_plugins import BENCHMARK_PLUGIN, OUTCOME_PLUGIN, stage_plugins
 from benchmarks.project_manifest import EditPatch, ProjectManifest, manifest
+from benchmarks.rich_workload import prepare_rich_workload
 
 
 def parse_args() -> argparse.Namespace:
@@ -293,7 +294,8 @@ def _vfy_command(
             "-m",
             "vfy",
             "test",
-            "--engine=pytest-native",
+            # The stock executor loads the outcome observer while vfy manages replay.
+            "--engine=pytest",
             "-j",
             str(project.workers if phase == "parallel" else 1),
             "--source",
@@ -318,6 +320,17 @@ def _vfy_command(
     )
 
 
+def _vfy_failure(log_path: Path, reason: str) -> RuntimeError:
+    with log_path.open("rb") as log:
+        tail_size = min(log.seek(0, os.SEEK_END), 4096)
+        log.seek(-tail_size, os.SEEK_END)
+        tail = log.read().decode("utf-8", errors="replace").strip().splitlines()[-40:]
+    message = f"{reason}\nFull child output: {log_path}"
+    if tail:
+        message += "\nChild output tail:\n" + "\n".join(f"  | {line}" for line in tail)
+    return RuntimeError(message)
+
+
 def _run_vfy(
     root: Path,
     project: ProjectManifest,
@@ -328,6 +341,7 @@ def _run_vfy(
     label: str,
     cov_config: Path | None,
     measure: bool,
+    expected_returncode: int = 0,
 ) -> tuple[float, list[tuple[str, str, str, str | None]], list[Path], list[Path], int]:
     records: list[tuple[str, str, str, str | None]] = []
     reports: list[Path] = []
@@ -355,9 +369,8 @@ def _run_vfy(
             measure=measure,
         )
         elapsed += phase_elapsed
-        (artifacts / f"{label}-{phase}.log").write_text(
-            (completed.stdout or "") + (completed.stderr or ""), encoding="utf-8"
-        )
+        log_path = artifacts / f"{label}-{phase}.log"
+        log_path.write_text((completed.stdout or "") + (completed.stderr or ""), encoding="utf-8")
         returncode = completed.returncode
         if outcome_path.is_file():
             records.extend(outcome_records(outcome_path))
@@ -370,6 +383,10 @@ def _run_vfy(
             shutil.copy2(data_file, snapshot)
         data_files.append(snapshot)
         if returncode:
+            if returncode != expected_returncode:
+                raise _vfy_failure(
+                    log_path, f"{label} ({phase}): vfy command failed with exit {returncode}"
+                )
             break
     return elapsed, records, reports, data_files, returncode
 
@@ -597,8 +614,6 @@ def _selection_step(
         cov_config=cov_config,
         measure=measure,
     )
-    if returncode:
-        raise RuntimeError(f"{label}: vfy command failed with exit {returncode}")
     oracle_records, oracle_reports, oracle_data = _oracle(
         root, project, python, project.tests, phases, artifacts, f"{label}-oracle", cov_config
     )
@@ -662,11 +677,21 @@ def run_sequence(
     """Run the edit sequence and return report paths and step durations."""
 
     artifacts.mkdir(parents=True, exist_ok=True)
-    revision = run_checked(
-        ["git", "rev-parse", "HEAD"], cwd=root, env=benchmark_environment(), timeout=30
-    ).stdout.strip()
+    revision = (
+        project.revision
+        if reset and project.key == "rich"
+        else run_checked(
+            ["git", "rev-parse", "HEAD"], cwd=root, env=benchmark_environment(), timeout=30
+        ).stdout.strip()
+    )
     if reset:
         reset_checkout(root, revision)
+        if project.key == "rich":
+            stabilization, clock = prepare_rich_workload(root)
+            (artifacts / "rich-test-adaptations.json").write_text(
+                json.dumps({"stabilization": stabilization, "clock": clock}, indent=2) + "\n",
+                encoding="utf-8",
+            )
     steps: list[dict[str, object]] = []
     phases = project.phases
     steps.append(
@@ -692,8 +717,8 @@ def run_sequence(
         cov_config=cov_config,
         measure=measure,
     )
-    if unchanged_code or unchanged_records:
-        raise RuntimeError("unchanged workflow unexpectedly executed tests or failed")
+    if unchanged_records:
+        raise RuntimeError("unchanged workflow unexpectedly executed tests")
     _verify_unchanged_cache(root, artifacts, phases)
     steps.append(
         {
@@ -740,12 +765,14 @@ def run_sequence(
         label="breaking-edit",
         cov_config=cov_config,
         measure=measure,
+        expected_returncode=1,
     )
     calls = [record for record in breaking_records if record[1] == "call"]
     if breaking_code != 1 or not any(record[2] == "failed" for record in calls):
-        raise RuntimeError(
+        raise _vfy_failure(
+            artifacts / "breaking-edit-parallel.log",
             f"breaking edit did not produce a real call failure: exit={breaking_code}, "
-            f"outcomes={breaking_records[:8]!r}"
+            f"outcomes={breaking_records[:8]!r}",
         )
     if any(
         record[2] == "failed" and record[1] in {"setup", "teardown"} for record in breaking_records

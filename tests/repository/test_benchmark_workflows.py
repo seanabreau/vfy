@@ -188,6 +188,51 @@ def test_vfy_sequence_clears_reference_caches_before_timing(
     assert not pytest_cache.exists()
 
 
+def test_unexpected_vfy_failure_retains_log_and_reports_bounded_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        benchmark_workflows,
+        "_vfy_command",
+        lambda *args, **kwargs: (
+            [],
+            {},
+            tmp_path / "outcomes.jsonl",
+            tmp_path / "report.json",
+            tmp_path / "coverage",
+        ),
+    )
+    stdout = "earlier output\n" + "verbose output " * 500 + "\n" + "other line\n" * 50
+    stderr = "::error::child process rejected the configuration\n"
+    monkeypatch.setattr(
+        benchmark_workflows,
+        "_run_child",
+        lambda *args, **kwargs: (0.0, subprocess.CompletedProcess([], 4, stdout, stderr)),
+    )
+
+    with pytest.raises(RuntimeError, match=r"baseline \(parallel\).*exit 4") as failure:
+        benchmark_workflows._run_vfy(
+            tmp_path,
+            manifest("rich"),
+            tmp_path / "python",
+            phases=("parallel",),
+            artifacts=tmp_path,
+            label="baseline",
+            cov_config=None,
+            measure=False,
+        )
+
+    log = tmp_path / "baseline-parallel.log"
+    assert log.read_text(encoding="utf-8") == stdout + stderr
+    banner, path, heading, *excerpt = str(failure.value).splitlines()
+    assert banner == "baseline (parallel): vfy command failed with exit 4"
+    assert path == f"Full child output: {log}"
+    assert heading == "Child output tail:"
+    assert excerpt[-1] == "  | ::error::child process rejected the configuration"
+    assert len(excerpt) <= 40
+    assert all(line.startswith("  | ") and "earlier output" not in line for line in excerpt)
+
+
 def test_workflow_producer_output_round_trips_through_compare(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

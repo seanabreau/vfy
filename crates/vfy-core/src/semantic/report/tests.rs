@@ -210,9 +210,11 @@ fn semantic_source_validation_rejects_conflicting_digests_for_one_file() {
 #[test]
 fn semantic_reports_propagate_discovered_source_decode_errors() {
     let directory = tempfile::tempdir().expect("semantic source directory");
-    let path = directory.path().join("invalid.py");
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let directory_path = crate::path::absolute_path(directory.path());
+    let path = directory_path.join("invalid.py");
     std::fs::write(&path, b"if '\xff':\n    pass\n").expect("invalid UTF-8 source file");
-    for root in [&path, &directory.path().to_path_buf()] {
+    for root in [&path, &directory_path] {
         let error = build_semantic_report(
             SemanticData::default(),
             &SemanticReportOptions {

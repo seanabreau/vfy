@@ -597,14 +597,16 @@ fn removed_source_roots_no_longer_participate_in_input_identity() {
 fn overlapping_root_replacements_keep_edit_revert_events() {
     for expand in [false, true] {
         let root = tempfile::tempdir().expect("external root");
-        let package = root.path().join("pkg");
+        // Expect resolved paths, as on macOS where temporary paths are symlinks.
+        let root_path = crate::path::absolute_path(root.path());
+        let package = root_path.join("pkg");
         std::fs::create_dir(&package).expect("package");
         let source = package.join("app.py");
         std::fs::write(&source, "VALUE = 1\n").expect("original source");
         let (old, new) = if expand {
-            (package.as_path(), root.path())
+            (package.as_path(), root_path.as_path())
         } else {
-            (root.path(), package.as_path())
+            (root_path.as_path(), package.as_path())
         };
         let mut session = session(old);
         session

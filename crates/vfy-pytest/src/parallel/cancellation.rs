@@ -308,19 +308,22 @@ fn group_leader_reaped(child: &mut Option<ParallelChild>) -> io::Result<bool> {
     }
 }
 
+#[cfg(target_os = "macos")]
+const GROUP_ABSENCE_WAIT: Duration = Duration::from_millis(100);
+
 // Darwin can deny a group signal while the exiting leader is not yet waitable.
 // Preserve its exit for the normal completion-validation loop; only ESRCH from
 // the non-signalling probe proves the whole group disappeared after reaping.
 #[cfg(any(target_os = "macos", test))]
 fn confirm_group_absent(
     error: io::Error,
+    deadline: Instant,
     mut reap: impl FnMut() -> io::Result<bool>,
     mut probe: impl FnMut() -> rustix::io::Result<()>,
 ) -> io::Result<()> {
     if error.raw_os_error() != Some(rustix::io::Errno::PERM.raw_os_error()) {
         return Err(error);
     }
-    let deadline = Instant::now() + Duration::from_millis(100);
     loop {
         match reap() {
             Ok(true) => break,
@@ -353,6 +356,7 @@ pub(super) fn signal_group(
         if let Err(error) = result {
             confirm_group_absent(
                 error,
+                Instant::now() + GROUP_ABSENCE_WAIT,
                 || group_leader_reaped(child),
                 || rustix::process::test_kill_process_group(pid),
             )

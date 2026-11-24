@@ -16,8 +16,15 @@ SCRIPT = Path(__file__).parents[2] / "scripts" / "check_ci_results.sh"
 COMMON = {"CHANGE_SCOPE", "REPOSITORY", "SUPPLY_CHAIN", "WORKFLOW_SECURITY"}
 TIERS = {
     "documentation": {"DOCUMENTATION"},
-    "tests": {"QUALITY", "FAST_BUILD", "FAST_WHEEL", "NATIVE_ADOPTION"},
-    "platform": {"QUALITY", "RUST_MATRIX", "FULL_BUILD", "FULL_WHEEL", "NATIVE_ADOPTION"},
+    "tests": {"QUALITY", "FAST_BUILD", "FAST_WHEEL", "NATIVE_PYTEST", "NATIVE_ADOPTION"},
+    "platform": {
+        "QUALITY",
+        "RUST_MATRIX",
+        "FULL_BUILD",
+        "FULL_WHEEL",
+        "NATIVE_PYTEST",
+        "NATIVE_ADOPTION",
+    },
 }
 JOBS = COMMON | set.union(*TIERS.values())
 

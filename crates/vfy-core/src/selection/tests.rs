@@ -422,8 +422,14 @@ fn affected_graph_read_does_not_replace_green_baseline() {
 #[test]
 fn git_replay_state_reads_each_requested_repository_and_its_live_changes() {
     let first = tempfile::tempdir().expect("first repository");
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let first_path = crate::path::absolute_path(first.path());
     let second = tempfile::tempdir().expect("second repository");
-    for (root, contents) in [(first.path(), "first\n"), (second.path(), "second\n")] {
+    let second_path = crate::path::absolute_path(second.path());
+    for (root, contents) in [
+        (first_path.as_path(), "first\n"),
+        (second_path.as_path(), "second\n"),
+    ] {
         git_at(root, &["init", "-q"]);
         git_at(root, &["config", "user.email", "vfy@example.invalid"]);
         git_at(root, &["config", "user.name", "vfy test"]);
@@ -431,25 +437,26 @@ fn git_replay_state_reads_each_requested_repository_and_its_live_changes() {
         git_at(root, &["add", "source.py"]);
         git_at(root, &["commit", "-qm", "baseline"]);
     }
-    std::fs::write(first.path().join("source.py"), "first changed\n").expect("first change");
-    let first_state = read_git_replay_state_at(first.path(), &[]).expect("first state");
-    let second_state = read_git_replay_state_at(second.path(), &[]).expect("second state");
+    std::fs::write(first_path.join("source.py"), "first changed\n").expect("first change");
+    let first_state = read_git_replay_state_at(first_path.as_path(), &[]).expect("first state");
+    let second_state = read_git_replay_state_at(second_path.as_path(), &[]).expect("second state");
     assert_ne!(first_state.head, second_state.head);
     assert_eq!(
         first_state.changed,
-        [crate::glob_path(&first.path().join("source.py"))]
+        [crate::glob_path(&first_path.join("source.py"))]
     );
     assert!(second_state.changed.is_empty());
 
-    std::fs::write(second.path().join("source.py"), "second changed\n").expect("second change");
-    let second_changed = read_git_replay_state_at(second.path(), &[]).expect("live second state");
+    std::fs::write(second_path.join("source.py"), "second changed\n").expect("second change");
+    let second_changed =
+        read_git_replay_state_at(second_path.as_path(), &[]).expect("live second state");
     assert_eq!(second_changed.head, second_state.head);
     assert_eq!(
         second_changed.changed,
-        [crate::glob_path(&second.path().join("source.py"))]
+        [crate::glob_path(&second_path.join("source.py"))]
     );
     assert_eq!(
-        read_git_replay_state_at(first.path(), &[]).expect("first state again"),
+        read_git_replay_state_at(first_path.as_path(), &[]).expect("first state again"),
         first_state
     );
 }
@@ -457,7 +464,9 @@ fn git_replay_state_reads_each_requested_repository_and_its_live_changes() {
 #[test]
 fn git_replay_state_filters_ignored_changes_without_leaking_status_flags() {
     let directory = tempfile::tempdir().expect("Git directory");
-    let root = directory.path();
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let directory_path = crate::path::absolute_path(directory.path());
+    let root = directory_path.as_path();
     for args in [
         &["init", "-q"][..],
         &["config", "user.email", "vfy@example.invalid"][..],
@@ -2141,7 +2150,9 @@ fn empty_selection_estimates_positive_zero_seconds() {
 #[test]
 fn git_replay_patch_ignores_user_diff_and_color_configuration() {
     let directory = tempfile::tempdir().expect("Git directory");
-    let root = directory.path();
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let directory_path = crate::path::absolute_path(directory.path());
+    let root = directory_path.as_path();
     git_at(root, &["init", "-q"]);
     git_at(root, &["config", "user.email", "vfy@example.invalid"]);
     git_at(root, &["config", "user.name", "vfy test"]);
@@ -2167,7 +2178,13 @@ fn git_replay_patch_ignores_user_diff_and_color_configuration() {
 #[test]
 fn git_replay_state_reports_changes_below_generated_directory_names() {
     let directory = tempfile::tempdir().expect("Git directory");
-    let root = directory.path().join("target").join(".cache").join("repo");
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let directory_path = crate::path::absolute_path(directory.path());
+    let root = directory_path
+        .as_path()
+        .join("target")
+        .join(".cache")
+        .join("repo");
     std::fs::create_dir_all(root.join("build")).expect("repository layout");
     git_at(&root, &["init", "-q"]);
     git_at(&root, &["config", "user.email", "vfy@example.invalid"]);
@@ -2200,7 +2217,9 @@ fn git_replay_state_reports_changes_below_generated_directory_names() {
 #[test]
 fn git_replay_state_reports_empty_repositories_and_linked_worktrees() {
     let directory = tempfile::tempdir().expect("Git directory");
-    let main = directory.path().join("main repo");
+    // Expect resolved paths, as on macOS where temporary paths are symlinks.
+    let directory_path = crate::path::absolute_path(directory.path());
+    let main = directory_path.join("main repo");
     std::fs::create_dir(&main).expect("repository directory");
     git_at(&main, &["init", "-q"]);
     git_at(&main, &["config", "user.email", "vfy@example.invalid"]);
@@ -2212,7 +2231,7 @@ fn git_replay_state_reports_empty_repositories_and_linked_worktrees() {
     std::fs::write(main.join("module.py"), "value = 1\n").expect("source");
     git_at(&main, &["add", "."]);
     git_at(&main, &["commit", "-qm", "baseline"]);
-    let linked = directory.path().join("linked ünï");
+    let linked = directory_path.join("linked ünï");
     git_at(
         &main,
         &[

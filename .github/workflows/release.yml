@@ -216,8 +216,7 @@ jobs:
     name: Test release ${{ matrix.id }} wheel on Python ${{ matrix.python }}
     needs: [version, build-wheels]
     runs-on: ${{ matrix.os }}
-    # Full serial suite plus the native pytest-version matrix.
-    timeout-minutes: 360
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -253,8 +252,12 @@ jobs:
         run: |
           uv sync --locked --group dev --group benchmark --no-install-project --python "$PYTHON_VERSION"
           uv pip install --reinstall --no-deps dist/*.whl
+      # Linux runners have 4 vCPUs. On 3-core macOS runners, xdist workers starve
+      # the suite's subprocess timing tests, so macOS runs the suite serially.
       - name: Run the complete suite against the installed release wheel
-        run: uv run --no-sync pytest -q
+        env:
+          PYTEST_WORKERS: ${{ runner.os == 'Linux' && 'auto' || '0' }}
+        run: uv run --no-sync pytest -q -n "$PYTEST_WORKERS"
       - name: Verify installed native typing declarations
         run: uv run --no-sync python scripts/check_wheel_typing.py
       - name: Check minimum xdist with pinned pytest
@@ -269,9 +272,38 @@ jobs:
         run: |
           uv pip uninstall pytest-asyncio
           uv run --no-sync pytest -q tests/integration/test_asyncio_floor.py
-      - name: Test native pytest range without xdist
-        if: matrix.id == 'linux-x86_64' && matrix.python == '3.12'
-        run: bash scripts/check_native_pytest_versions.sh
+
+  release-native-pytest:
+    name: Test release Linux wheel with pytest ${{ matrix.pytest }}
+    needs: [version, build-wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        pytest: ["9.1.0", "9.1.1", "9.2.0"]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.12"
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-wheel-linux-x86_64
+          path: dist
+      - name: Install locked test dependencies and the release wheel
+        run: |
+          uv sync --locked --group dev --group benchmark --no-install-project
+          uv pip install --reinstall --no-deps dist/*.whl
+      - name: Test native pytest compatibility
+        env:
+          PYTEST_VERSION: ${{ matrix.pytest }}
+        run: bash scripts/check_native_pytest_versions.sh "$PYTEST_VERSION"
 
   release-rust:
     name: Test release Rust workspace
@@ -333,7 +365,7 @@ jobs:
 
   verify:
     name: Verify the release artifacts
-    needs: [version, build-wheels, build-sdist, sbom, release-tests, release-rust]
+    needs: [version, build-wheels, build-sdist, sbom, release-tests, release-native-pytest, release-rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

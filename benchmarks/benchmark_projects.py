@@ -762,15 +762,17 @@ def validate_parity(  # noqa: C901
             if restore_generated_files is not None:
                 restore_generated_files()
             output = outputs[name]
-            output.unlink(missing_ok=True)
             xml_output = xml_outputs.get(name)
-            if xml_output is not None:
-                xml_output.unlink(missing_ok=True)
             data_file = output_root / f".vfy-benchmark-{name}"
             data_file.unlink(missing_ok=True)
             name_outcomes: list[tuple[str, str, str, str | None]] = []
             selected_phases = phases or project.phases
             for index, phase in enumerate(selected_phases):
+                # Coverage append looks for shards with the database's filename prefix.
+                # Regenerate the reports after the combine so they cannot match that prefix.
+                output.unlink(missing_ok=True)
+                if xml_output is not None:
+                    xml_output.unlink(missing_ok=True)
                 outcome_path = output_root / f"{name}-{phase}-outcomes.jsonl"
                 outcome_path.unlink(missing_ok=True)
                 env = {

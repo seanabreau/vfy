@@ -363,6 +363,7 @@ The harness prints the current tool and sample number to stderr, outside the tim
 - `--pytest-args` applies extra options, such as exclusions, to both tools identically. Keep them in the result and its description.
 
 For `workflows`, prepare Rich or Datasette the same way. Then run `benchmarks validate workflows` with the prepared project root, interpreter, manifest, and a separate artifact directory. The controller checks the edit, failure, and repair outcomes without collecting timings. Run `benchmarks run workflows` with the same arguments to measure the sequence.
+For Rich, both executors use the reviewed deterministic test fixtures. Each sequence retains their input hashes and derived baseline commit in `rich-test-adaptations.json`.
 
 Use `--phase serial` to run a project's complete suite without xdist. Choose it when test execution depends on which worker imported a module first. FastAPI's debugging tests have this import-state condition. The serial phase records `-n 0` and compares both coverage tools under the same test order. The result records the phase separately from the manifest's default parallel workflow.
 

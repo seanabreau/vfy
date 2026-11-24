@@ -66,7 +66,7 @@ checks with `uv run pytest -q tests/repository`. Shared process helpers live in
 | Diagnostics and invalid configuration | Streams, exit statuses, and absence of work | `uv run pytest -q tests/integration/test_cli_diagnostics.py` |
 | Built-in asyncio | Differential tests against pytest-asyncio 1.4.0 | `uv run pytest -q tests/integration/test_asyncio.py` |
 | Built-in HTML and metadata | Reports, hooks, redaction, and publication | `uv run pytest -q tests/integration/test_pytest_html.py` |
-| Installed artifacts | Fast Linux wheel lane and full platform wheel matrix | CI `wheel-fast` or `wheel` job |
+| Installed artifacts | Fast Linux wheel lane and full platform wheel matrix | CI `wheel-fast` or `wheel` job, plus `native-pytest` |
 | Repository health | Locked licenses, advisories, unused code, and workflow security | CI supply-chain jobs |
 | Performance | Parity-gated committed harness and retained samples | [Benchmark commands](https://github.com/seanabreau/vfy/blob/main/benchmarks/README.md) |
 
@@ -206,10 +206,10 @@ Release publication requires the complete Python suite against installed ABI3
 wheels on Linux CPython 3.12–3.15, and on macOS ARM64 CPython
 3.12, 3.14, and 3.15. The same commit must pass the Rust workspace tests on Linux.
 
-The Linux CPython 3.12 wheel checks are configured to run pytest 9.1.0, 9.1.1, and 9.2.0. Each version runs the native
+Separate Linux CPython 3.12 wheel jobs are configured to run pytest 9.1.0, 9.1.1, and 9.2.0. Each version runs the native
 version-boundary suite without xdist, then installs pytest-xdist 3.8.0 for the
 broader native suite's stock-pytest comparisons.
-They also run pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
+The Linux CPython 3.12 full-suite job also runs pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
 direct-pytest coverage integration. The built-in asyncio check runs without
 pytest-asyncio installed.
 
@@ -272,7 +272,7 @@ Its separate recorded-project matrix has these lanes:
 | Rich | 3.12, 3.13 | Require the parity comparison to pass |
 | Rich | 3.14 | Require a known schema-7 rejection |
 | Requests | 3.12, 3.13, 3.14 | Require the parity comparison to pass |
-| Datasette | 3.12 | Require a known report-generation or source-parsing rejection |
+| Datasette | 3.12 | Require a known report-generation, source-parsing, or measured-file rejection |
 
 The diagnostic lanes require a nonzero result matching their expected error;
 a passing diagnostic job does not establish successful parity. Jobs retain
@@ -280,6 +280,10 @@ reports, databases, resolved dependencies, logs, and semantic differences, and
 publish no timings. This configured matrix is separate from the
 [historical benchmarks](benchmarks.md); check the candidate's retained job
 results for execution evidence.
+
+Datasette's measured-file rejection requires `datasette/utils/shutil_backport.py`
+to be the only extra file in vfy's report. The pinned `.coveragerc` omits this
+file, but vfy measures it when a child process starts outside the project root.
 
 The workflow does not block releases. A case can become a required CI check
 after its expected behavior and comparison method are reviewed.

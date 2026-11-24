@@ -302,8 +302,10 @@ def main() -> int:
         write_atomic(output / f"{route}-normalized.json", dict(results[route]))
     for route in ("pytest-native", "native-workers"):
         compare_results(results["pytest"], results[route])
-    edit_sequence = check_edit_recovery(python, output / "native-project", output)
-    if git(output / "native-project", "status", "--porcelain"):
+    # The edit sequence runs pytest-native, so it reuses that route's checkout.
+    edit_checkout = output / "pytest-native-project"
+    edit_sequence = check_edit_recovery(python, edit_checkout, output)
+    if git(edit_checkout, "status", "--porcelain"):
         raise ValueError("edit sequence did not restore the pristine project")
     write_atomic(
         output / "result.json",
