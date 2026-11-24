@@ -24,10 +24,8 @@ from benchmarks.benchmark_real_selection import (
     check_coverage_stage,
     check_native_junit,
     check_required_selection,
-    commit_rich_test_adaptations,
     compare_outcomes,
     full_oracle,
-    install_rich_clock_fixture,
     native_outcomes,
     parse_args,
     required_affected_nodes,
@@ -37,6 +35,7 @@ from benchmarks.benchmark_real_selection import (
     stash_testmon_data,
 )
 from benchmarks.project_manifest import EditPatch, ProjectManifest, manifest
+from benchmarks.rich_workload import commit_rich_test_adaptations, install_rich_clock_fixture
 from scripts.process_tree import run_captured
 
 from tests.support.vfy_project import VfyProject
