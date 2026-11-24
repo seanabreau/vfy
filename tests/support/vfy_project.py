@@ -507,7 +507,7 @@ class VfyProject:
             PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
             GIT_CONFIG_NOSYSTEM="1",
             GIT_CONFIG_GLOBAL=os.devnull,
-            GIT_CONFIG_COUNT="4",
+            GIT_CONFIG_COUNT="6",
             GIT_CONFIG_KEY_0="commit.gpgsign",
             GIT_CONFIG_VALUE_0="false",
             GIT_CONFIG_KEY_1="tag.gpgsign",
@@ -516,6 +516,12 @@ class VfyProject:
             GIT_CONFIG_VALUE_2="false",
             GIT_CONFIG_KEY_3="core.hooksPath",
             GIT_CONFIG_VALUE_3=home,
+            # Detached auto-maintenance can add and remove lock files while a
+            # test copies the repository.
+            GIT_CONFIG_KEY_4="maintenance.auto",
+            GIT_CONFIG_VALUE_4="false",
+            GIT_CONFIG_KEY_5="gc.auto",
+            GIT_CONFIG_VALUE_5="0",
         )
         if self._explicit_interpreter:
             process_environment["PYTHONNOUSERSITE"] = "1"
