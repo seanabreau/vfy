@@ -31,14 +31,16 @@ XML escaping. Python integration tests run temporary projects through
 `VfyProject` and compare public behavior with pinned pytest.
 
 On Linux with CPython 3.12, CI is configured to run each pytest version listed
-under [release validation](testing.md#release-validation). A separate first pass
-uses the declared minimum pytest 8.0.0 and pluggy 1.5.0, checking version
-boundaries, protocol wrappers, warning filters, and warnings retained after
-control exceptions. The regular matrix restores pluggy 1.6.0. To reproduce the
-check in a disposable environment with vfy installed:
+under [release validation](testing.md#release-validation) as a separate job. The
+pytest 9.1.0 job first uses the declared minimum pytest 9.1.0 and pluggy 1.5.0,
+checking version boundaries, protocol wrappers, warning filters, and warnings
+retained after control exceptions. Each version then runs with pluggy 1.6.0, and
+the pytest 9.2.0 job also checks pluggy 1.7.0. To reproduce the checks in a
+disposable environment with vfy installed, run every version or name one:
 
 ```console
 bash scripts/check_native_pytest_versions.sh
+bash scripts/check_native_pytest_versions.sh 9.2.0
 ```
 
 ## Find a test

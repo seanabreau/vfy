@@ -66,7 +66,7 @@ checks with `uv run pytest -q tests/repository`. Shared process helpers live in
 | Diagnostics and invalid configuration | Streams, exit statuses, and absence of work | `uv run pytest -q tests/integration/test_cli_diagnostics.py` |
 | Built-in asyncio | Differential tests against pytest-asyncio 1.4.0 | `uv run pytest -q tests/integration/test_asyncio.py` |
 | Built-in HTML and metadata | Reports, hooks, redaction, and publication | `uv run pytest -q tests/integration/test_pytest_html.py` |
-| Installed artifacts | Fast Linux wheel lane and full platform wheel matrix | CI `wheel-fast` or `wheel` job |
+| Installed artifacts | Fast Linux wheel lane and full platform wheel matrix | CI `wheel-fast` or `wheel` job, plus `native-pytest` |
 | Repository health | Locked licenses, advisories, unused code, and workflow security | CI supply-chain jobs |
 | Performance | Parity-gated committed harness and retained samples | [Benchmark commands](https://github.com/seanabreau/vfy/blob/main/benchmarks/README.md) |
 
@@ -206,10 +206,10 @@ Release publication requires the complete Python suite against installed ABI3
 wheels on Linux CPython 3.12–3.15, and on macOS ARM64 CPython
 3.12, 3.14, and 3.15. The same commit must pass the Rust workspace tests on Linux.
 
-The Linux CPython 3.12 wheel checks are configured to run pytest 9.1.0, 9.1.1, and 9.2.0. Each version runs the native
+Separate Linux CPython 3.12 wheel jobs are configured to run pytest 9.1.0, 9.1.1, and 9.2.0. Each version runs the native
 version-boundary suite without xdist, then installs pytest-xdist 3.8.0 for the
 broader native suite's stock-pytest comparisons.
-They also run pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
+The Linux CPython 3.12 full-suite job also runs pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
 direct-pytest coverage integration. The built-in asyncio check runs without
 pytest-asyncio installed.
 
