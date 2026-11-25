@@ -196,7 +196,10 @@ def _update(event: str) -> int:
             state["active"] = active
             state["peak"] = max(int(state["peak"]), active)
             state["events"].append({"event": event, "pid": os.getpid(), "active": active})
-            state_path.write_text(json.dumps(state), encoding="utf-8")
+            # Replace the file so the unlocked final read never sees a partial write.
+            staged = state_path.with_name(f"{state_path.name}.{os.getpid()}")
+            staged.write_text(json.dumps(state), encoding="utf-8")
+            os.replace(staged, state_path)
             return active
         finally:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

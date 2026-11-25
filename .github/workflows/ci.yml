@@ -250,6 +250,8 @@ jobs:
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.14.1
+          # Reuse compiled dependencies between CI builds; release builds stay uncached.
+          sccache: "true"
           command: build
           args: --release --locked --out dist
       - name: Record Linux wheel build provenance
@@ -354,12 +356,8 @@ jobs:
           printf 'print("measured")\n' > vfy_only_check.py
           "$python" -m vfy coverage run vfy_only_check.py
           "$python" -m vfy coverage report --include=vfy_only_check.py --fail-under=100
-      # Linux runners have 4 vCPUs. On 3-core macOS runners, xdist workers starve
-      # the suite's subprocess timing tests, so macOS runs the suite serially.
       - name: Differential and round-trip tests against the installed wheel
-        env:
-          PYTEST_WORKERS: ${{ runner.os == 'Linux' && 'auto' || '0' }}
-        run: uv run --no-sync pytest -n "$PYTEST_WORKERS"
+        run: uv run --no-sync pytest -n auto
       - name: Asyncio compatibility with pinned pytest
         run: |
           uv pip uninstall pytest-asyncio
@@ -391,6 +389,8 @@ jobs:
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.14.1
+          # Reuse compiled dependencies between CI builds; release builds stay uncached.
+          sccache: "true"
           command: build
           args: --release --locked --out dist
       - name: Record Linux wheel build provenance
