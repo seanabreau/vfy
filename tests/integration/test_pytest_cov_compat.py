@@ -403,6 +403,57 @@ def test_pytest_no_cover_fixture_disables_the_call_phase(tmp_path: Path) -> None
     assert read_lines(tmp_path / ".coverage", product) == [1]
 
 
+def test_pytest_measures_custom_items_like_pytest_cov(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    product = write_project(tmp_path)
+    (tmp_path / "test_product.py").unlink()
+    project.write(
+        "conftest.py",
+        "import pytest\n"
+        "import product\n\n"
+        "class DataItem(pytest.Item):\n"
+        "    def runtest(self):\n"
+        "        assert getattr(product, self.name)() in {0, 42}\n\n"
+        "class DataFile(pytest.File):\n"
+        "    def collect(self):\n"
+        "        yield DataItem.from_parent(self, name='covered')\n"
+        "        excluded = DataItem.from_parent(self, name='missed')\n"
+        "        excluded.add_marker(pytest.mark.no_cover)\n"
+        "        yield excluded\n\n"
+        "def pytest_collect_file(file_path, parent):\n"
+        "    if file_path.suffix == '.dat':\n"
+        "        return DataFile.from_parent(parent, path=file_path)\n",
+    )
+    project.write("cases.dat", "")
+    arguments = ["--cov=product", "--cov-report=", "-q"]
+
+    actual = project.run_pytest(
+        "-p",
+        "vfy.pytest_plugin",
+        *arguments,
+        load_xdist=False,
+        env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+    )
+    expected = project.run_pytest(
+        "-p",
+        "pytest_cov.plugin",
+        *arguments,
+        load_xdist=False,
+        env={
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "COVERAGE_FILE": str(tmp_path / ".coverage.oracle"),
+        },
+    )
+
+    actual.expect(0)
+    expected.expect(0)
+    assert "2 passed" in actual.stdout
+    assert "2 passed" in expected.stdout
+    # The ``no_cover`` item's call to ``missed()`` leaves line 5 unmeasured.
+    assert read_lines(tmp_path / ".coverage", product) == [1, 2, 4]
+    assert read_lines(tmp_path / ".coverage.oracle", product) == [1, 2, 4]
+
+
 def test_pytest_no_cov_and_no_cov_on_fail(tmp_path: Path) -> None:
     write_project(tmp_path)
     test_file = tmp_path / "test_product.py"
