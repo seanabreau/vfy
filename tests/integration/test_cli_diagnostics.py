@@ -67,7 +67,6 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         ("lcov", 0, "", "Wrote LCOV report to coverage.lcov\n"),
         ("html", 0, "", "Wrote HTML report to htmlcov/index.html\n"),
         ("annotate", 0, "", "Annotated 1 file(s)\n"),
-        ("combine", 0, "", "No data to combine\n"),
         ("erase", 0, "", ""),
     ],
 )
@@ -244,6 +243,54 @@ def test_threshold_compares_the_total_rounded_to_the_report_precision(
 
     assert actual.returncode == reference.returncode, actual.stderr
     assert reference.returncode == status
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+@pytest.mark.parametrize(
+    ("measured", "arguments"),
+    [
+        (False, ("report", "--fail-under=90")),
+        (False, ("report", "--format=total")),
+        (True, ("report", "--include=elsewhere/*")),
+        (False, ("json",)),
+        (False, ("xml",)),
+        (False, ("lcov",)),
+        (False, ("html",)),
+        (False, ("annotate",)),
+        (True, ("combine",)),
+        (True, ("combine", "--keep")),
+    ],
+)
+def test_nothing_to_report_or_combine_fails_like_coverage_py(
+    tmp_path: Path, measured: bool, arguments: tuple[str, ...]
+) -> None:
+    project = VfyProject(tmp_path)
+    source = project.write("example.py", "value = 1\n")
+    data = ReferenceData(str(tmp_path / ".coverage"))
+    data.add_lines({str(source): {1}} if measured else {})
+    data.write()
+    before = _tree(tmp_path)
+
+    reference = project.run_coverage_py(*arguments)
+    assert _tree(tmp_path) == before
+    actual = project.run_vfy("coverage", *arguments)
+
+    assert reference.returncode == 1
+    assert reference.stdout in {"No data to report.\n", "No data to combine\n"}
+    # vfy writes diagnostics to stderr; Coverage.py prints its message to stdout.
+    assert (actual.returncode, actual.stdout, actual.stderr) == (
+        reference.returncode,
+        "",
+        f"vfy: error: {reference.stdout}",
+    )
+    assert _tree(tmp_path) == before
 
 
 def test_missing_data_matches_coverage_py_exit_code(project: Path) -> None:

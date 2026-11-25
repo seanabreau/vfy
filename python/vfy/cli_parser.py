@@ -491,7 +491,9 @@ def build_parser() -> argparse.ArgumentParser:
     combine.add_argument("paths", nargs="*", metavar="PATH", help="files or shard directories")
     _data_file(combine)
     combine.add_argument("--keep", action="store_true", help="keep input shards")
-    combine.add_argument("--strict", action="store_true", help="fail when no shards are found")
+    combine.add_argument(
+        "--strict", action="store_true", help="fail when no shards are found (the default)"
+    )
 
     erase = coverage_sub.add_parser("erase", help="erase coverage data")
     _data_file(erase)

@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
+from .errors import NoDataError
 from .native import (
     CoverageData as ExtensionCoverageData,
     append_report_output,
@@ -84,10 +85,13 @@ def write_pytest_reports(
     history_path: str | None = None,
     ignore_errors: bool | None = None,
 ) -> tuple[float, DecisionReport | None]:
-    """Render pytest reports from one already-complete coverage dataset."""
+    """Render pytest reports from one already-complete coverage dataset.
+
+    Raise `NoDataError` when nothing was measured; pytest-cov reports that as a
+    failed report with a total of zero.
+    """
     if not coverage.get_data().measured_files():
-        stream.write("WARNING: No data was collected.\n")
-        return 0.0, None
+        raise NoDataError("No data to report.")
 
     total: float | None = None
     skip_covered = "skip-covered" in reports.values()

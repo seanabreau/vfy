@@ -65,3 +65,44 @@ def test_fail_under_boundaries_match_pytest_cov(
 
     assert observed["native"] == observed["oracle"]
     assert observed["independent"] == observed["oracle"]
+
+
+@pytest.mark.parametrize("threshold", [None, "90"])
+def test_nothing_measured_reports_and_exits_like_pytest_cov(
+    tmp_path: Path, threshold: str | None
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("test_product.py", "def test_product():\n    pass\n")
+    arguments = ["--cov=missing", "-q"]
+    if threshold is not None:
+        arguments.append(f"--cov-fail-under={threshold}")
+
+    observed = {}
+    for route in _ROUTES:
+        result = _run(project, route, *arguments)
+        lines = [
+            line
+            for line in (result.stdout + result.stderr).splitlines()
+            if "WARNING:" in line or "Required test coverage" in line or "Coverage failure" in line
+        ]
+        # The stock plug-in writes the report warning inside its coverage section.
+        observed[route] = (result.returncode, sorted(lines))
+
+    assert observed["oracle"] == (
+        0 if threshold is None else 1,
+        sorted(
+            [
+                "WARNING: Failed to generate report: No data to report.",
+                *(
+                    []
+                    if threshold is None
+                    else [
+                        "ERROR: Coverage failure: total of 0 is less than fail-under=90",
+                        "FAIL Required test coverage of 90% not reached. Total coverage: 0.00%",
+                    ]
+                ),
+            ]
+        ),
+    )
+    assert observed["native"] == observed["oracle"]
+    assert observed["independent"] == observed["oracle"]
