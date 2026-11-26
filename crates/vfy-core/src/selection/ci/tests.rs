@@ -285,3 +285,18 @@ fn full_requests_never_scope_collection() {
     write_json(&request, &plan).expect("rewrite request");
     assert!(collection_scope(&request).expect("read request").is_none());
 }
+
+#[test]
+fn bytecode_caches_are_not_source_inputs() {
+    for path in [
+        "__pycache__/conftest.cpython-313.pyc",
+        "tests/__pycache__/test_a.cpython-313-vfy-0.0.1-f8310693.pyc",
+        "src/pkg/__pycache__/__init__.cpython-313.pyc",
+    ] {
+        assert!(!source_input(path), "{path}");
+    }
+    // A bytecode file outside `__pycache__` can be imported without source.
+    for path in ["pkg/module.pyc", "pkg/pycache/data.bin", "__pycache__.py"] {
+        assert!(source_input(path), "{path}");
+    }
+}

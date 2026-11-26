@@ -120,13 +120,24 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> Result<String, CoreErro
     Ok(result)
 }
 
+/// Whether a tracked path can change what the tests run.
+///
+/// The interpreter imports bytecode from `__pycache__` only for an existing source file
+/// and rewrites it when it no longer matches that source (PEP 3147), as vfy's
+/// assertion rewriting does for test modules. Tracked bytecode there is a
+/// cache of other inputs, and importing tests can rewrite it during a run.
+fn source_input(path: &str) -> bool {
+    !path.split('/').any(|part| part == "__pycache__")
+}
+
 fn tracked_files(root: &Path) -> Result<BTreeSet<String>, CoreError> {
     let bytes = git(root, &["ls-files", "-z"])?;
-    let files: BTreeSet<String> = bytes
+    let mut files: BTreeSet<String> = bytes
         .split(|byte| *byte == 0)
         .filter(|part| !part.is_empty())
         .map(|part| String::from_utf8(part.to_vec()).map_err(invalid))
         .collect::<Result<_, _>>()?;
+    files.retain(|path| source_input(path));
     if files.len() > MAX_RECORDS {
         return Err(invalid("too many tracked files"));
     }

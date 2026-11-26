@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -484,3 +485,23 @@ def test_independent_coverage_run_without_git_head_runs_the_full_suite(
     assert _FULL in result.stderr
     assert "Git state is unavailable" in result.stderr
     assert (tmp_path / ".coverage").is_file()
+
+
+def test_bytecode_rewritten_during_collection_is_not_a_source_change(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.run_vfy("test", "--engine=native", *_ARGUMENTS).expect(0)
+    project.run("git", "add", "--force", "pkg/__pycache__", "tests/__pycache__").expect(0)
+    project.git_commit("Track bytecode")
+    tracked = project.run("git", "ls-files", "*.pyc").expect(0).stdout.split()
+    assert any("-vfy-" in path for path in tracked), tracked
+    # A fresh checkout gives sources new modification times, so CPython and
+    # vfy's assertion rewriting both rewrite the tracked bytecode on import.
+    for source in (*tmp_path.glob("pkg/*.py"), *tmp_path.glob("tests/*.py")):
+        os.utime(source, (source.stat().st_atime, source.stat().st_mtime + 60))
+
+    rerun = project.run_vfy("test", "--engine=native", *_ARGUMENTS)
+
+    rerun.expect(0)
+    assert "2 passed" in rerun.stdout
+    rewritten = project.run("git", "diff", "--name-only", "--", "*.pyc").expect(0).stdout
+    assert "-vfy-" in rewritten, "the run must rewrite vfy's tracked bytecode"
