@@ -1202,6 +1202,64 @@ def test_quiet_suppresses_confirmations_but_keeps_errors_and_reports(project: Pa
     assert "coverage data file not found" in error.stderr
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("report",),
+        ("annotate",),
+        ("html",),
+        ("json",),
+        ("xml",),
+        ("lcov",),
+        ("combine",),
+        ("erase",),
+        ("debug", "data"),
+        ("run", "program.py"),
+    ],
+)
+def test_subcommand_quiet_option_matches_coverage_py(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    observed = {}
+    for engine in ("coverage", "vfy"):
+        project = VfyProject(tmp_path / engine)
+        source = project.write("example.py", "value = 1\n")
+        project.write("program.py", "value = 1\n")
+        for name in (".coverage", ".coverage.shard"):
+            data = ReferenceData(str(project.root / name))
+            data.add_lines({str(source): {1}})
+            data.write()
+        # Coverage.py accepts the option after the command name, before positionals.
+        command = (arguments[0], "-q", *arguments[1:])
+        result = (
+            project.run_coverage_py(*command)
+            if engine == "coverage"
+            else project.run_vfy("coverage", *command)
+        )
+        observed[engine] = result
+
+    reference, actual = observed["coverage"], observed["vfy"]
+    accepted = arguments[0] in {"combine", "html", "json", "lcov", "xml"}
+    assert (reference.returncode == 0) == accepted, reference
+    assert (actual.returncode == 0) == accepted, actual
+    if accepted:
+        assert (reference.stdout, reference.stderr) == ("", "")
+        assert (actual.stdout, actual.stderr) == ("", "")
+    else:
+        assert "no such option: -q" in reference.stderr
+        assert actual.returncode == 2
+        assert "unrecognized arguments: -q" in actual.stderr
+
+
+def test_subcommand_quiet_option_conflicts_with_verbose(project: Path) -> None:
+    conflict = VfyProject(project).run_vfy("--verbose", "coverage", "json", "--quiet")
+
+    assert conflict.returncode == 2
+    assert conflict.stdout == ""
+    assert "argument -q/--quiet: not allowed with argument -v/--verbose" in conflict.stderr
+    assert not (project / "coverage.json").exists()
+
+
 def test_verbose_keeps_json_clean_and_conflicts_with_quiet(tmp_path: Path) -> None:
     command = VfyProject(tmp_path)
     result = command.run_vfy("--verbose", "--isolated", "config", "show")
