@@ -226,7 +226,7 @@ class MonitoringCollector:
                     else:
                         event_set |= event
             else:
-                event_set |= self._register_line_arc_events(legacy_branch)
+                event_set |= self._register_line_arc_events()
         self._instrument_events = event_set
         # A previous collector can leave PY_START or LINE locations disabled
         # on surviving code objects. A new run needs to observe them again.
@@ -235,7 +235,7 @@ class MonitoringCollector:
         if self._local_legacy_branch_events:
             self._instrument_current_frames()
 
-    def _register_line_arc_events(self, legacy_branch: int) -> int:
+    def _register_line_arc_events(self) -> int:
         """Register the events that complete arcs derived from LINE events.
 
         LINE events omit repeated execution on one source line. A backward
@@ -251,10 +251,10 @@ class MonitoringCollector:
             for event in (
                 (events.BRANCH_LEFT, events.BRANCH_RIGHT)
                 if sys.version_info >= (3, 14)
-                else (legacy_branch,)
+                else (events.BRANCH,)
             ):
                 monitoring.register_callback(self._tool_id, event, self._core.callback_branch)
-            line_arc_events |= legacy_branch
+                line_arc_events |= event
         if self._local_legacy_branch_events:
             self._local_instrument_events |= line_arc_events
             return events.NO_EVENTS
@@ -265,7 +265,7 @@ class MonitoringCollector:
         if not self._local_legacy_branch_events:
             return events.NO_EVENTS
         self._local_instrument_events = (
-            events.LINE | events.PY_RESUME | events.PY_RETURN | events.PY_YIELD | events.JUMP
+            events.LINE | events.PY_RESUME | events.PY_RETURN | events.PY_YIELD
         )
         return events.PY_START
 
