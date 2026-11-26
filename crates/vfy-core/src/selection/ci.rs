@@ -127,6 +127,16 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> Result<String, CoreErro
     Ok(result)
 }
 
+/// Whether a tracked path can change what the tests run.
+///
+/// The interpreter imports bytecode from `__pycache__` only for an existing source file
+/// and rewrites it when it no longer matches that source (PEP 3147), as vfy's
+/// assertion rewriting does for test modules. Tracked bytecode there is a
+/// cache of other inputs, and importing tests can rewrite it during a run.
+fn source_input(path: &str) -> bool {
+    !(path.ends_with(".pyc") && path.split('/').any(|part| part == "__pycache__"))
+}
+
 fn tracked_files(root: &Path) -> Result<BTreeMap<String, IndexEntry>, CoreError> {
     let files = parse_index(&git(root, &["ls-files", "--stage", "-z"])?).map_err(invalid)?;
     if files.len() > MAX_RECORDS {
@@ -135,6 +145,12 @@ fn tracked_files(root: &Path) -> Result<BTreeMap<String, IndexEntry>, CoreError>
     for path in files.keys() {
         checked_relative(path)?;
     }
+    Ok(files)
+}
+
+fn source_inputs(root: &Path) -> Result<BTreeMap<String, IndexEntry>, CoreError> {
+    let mut files = tracked_files(root)?;
+    files.retain(|path, entry| matches!(entry, IndexEntry::Submodule { .. }) || source_input(path));
     Ok(files)
 }
 
@@ -251,7 +267,7 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
     if !state.changed.is_empty() {
         return Err(invalid("baseline export requires a clean checkout"));
     }
-    let index = tracked_files(&root)?;
+    let index = source_inputs(&root)?;
     let source_digests = export_digests(&root, &index)?;
     let tracked: BTreeSet<_> = source_digests.keys().cloned().collect();
     let collected: Vec<String> = read_json(request.collection_path)?;
@@ -330,7 +346,7 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
     };
     bundle.import_graph.validate(&tracked)?;
     // Source may change while the bundle is assembled.
-    let current = tracked_files(&root)?;
+    let current = source_inputs(&root)?;
     if current != index
         || submodule_change(&root, &current)
             .map_err(invalid)?
@@ -492,7 +508,7 @@ fn eligible_changes(
             "baseline commit is unavailable or is not an ancestor of HEAD".to_owned(),
         ));
     }
-    let tracked = tracked_files(root)?;
+    let tracked = source_inputs(root)?;
     if !tracked.keys().eq(bundle.source_digests.keys()) || state.untracked || state.deleted {
         return Ok(Err(
             "added, deleted, renamed, or untracked inputs require a full run".to_owned(),
@@ -765,7 +781,7 @@ pub fn write_plan_request(request: PlanRequest<'_>) -> Result<(), CoreError> {
     {
         request.source_identity
     } else if let Ok(root) = repository_root() {
-        source_identity(&root, &tracked_files(&root)?)?
+        source_identity(&root, &source_inputs(&root)?)?
     } else {
         request.source_identity
     };
@@ -955,7 +971,7 @@ pub fn plan_source_current(path: &Path, ignored: &[String]) -> Result<bool, Core
         return Ok(true);
     }
     let root = repository_root()?;
-    let files = tracked_files(&root)?;
+    let files = source_inputs(&root)?;
     let state = match read_git_replay_state(ignored) {
         Ok(state) => state,
         // A repository without commits has no HEAD. A plan prepared there has
