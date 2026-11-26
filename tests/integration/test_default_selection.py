@@ -484,3 +484,58 @@ def test_independent_coverage_run_without_git_head_runs_the_full_suite(
     assert _FULL in result.stderr
     assert "Git state is unavailable" in result.stderr
     assert (tmp_path / ".coverage").is_file()
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ("modified", "Git submodule data has uncommitted changes"),
+        ("checkout", "Git submodule data is not checked out at its recorded commit"),
+        ("deinit", "Git submodule data is not initialized"),
+    ],
+)
+def test_submodule_selects_by_recorded_commit_and_runs_everything_when_it_differs(
+    tmp_path: Path, change: str, reason: str
+) -> None:
+    origin = VfyProject(tmp_path / "origin")
+    origin.write("value.txt", "1\n")
+    origin.git_init()
+    project = _project(tmp_path / "project")
+    project.run(
+        "git",
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(origin.root),
+        "data",
+    ).expect(0)
+    project.git_commit("Add a data submodule")
+
+    def run(*arguments: str) -> CommandResult:
+        return project.run_vfy("test", "--engine=native", *arguments, *_ARGUMENTS)
+
+    complete = run("--all")
+    complete.expect(0)
+    assert "2 passed" in complete.stdout
+    project.write("pkg/a.py", "def value():\n    return 1 + 0\n")
+    selected = run()
+    selected.expect(0)
+    assert "Selected 1 / 2 tests" in selected.stderr
+    if change == "modified":
+        project.write("data/value.txt", "2\n")
+    elif change == "checkout":
+        identity = ("-c", "user.name=vfy Tests", "-c", "user.email=vfy-tests@example.invalid")
+        project.run(
+            "git", "-C", "data", *identity, "commit", "-q", "--allow-empty", "-m", "Bump"
+        ).expect(0)
+    else:
+        project.run("git", "submodule", "deinit", "-q", "-f", "data").expect(0)
+
+    changed = run()
+
+    changed.expect(0)
+    assert "2 passed" in changed.stdout
+    assert _FULL in changed.stderr
+    assert reason in changed.stderr

@@ -300,8 +300,15 @@ pub(crate) fn plan_test_selection(
                 .patch
         }
     };
+    // A source diff cannot describe a submodule; it is trusted only at its recorded commit.
+    let submodule_change = if location.is_none() {
+        vfy_core::selection::read_submodule_change(Path::new("."))
+            .map_err(PyRuntimeError::new_err)?
+    } else {
+        None
+    };
     let snapshot = data.core_snapshot();
-    let plan = vfy_core::selection::build_selection_plan_from_data(
+    let mut plan = vfy_core::selection::build_selection_plan_from_data(
         &snapshot,
         SelectionInput {
             mode,
@@ -321,6 +328,9 @@ pub(crate) fn plan_test_selection(
         },
     )
     .map_err(core_error)?;
+    if let Some(reason) = submodule_change {
+        plan.fall_back_to_full(reason);
+    }
     if let Some(path) = request_path {
         vfy_core::selection::ci::write_plan_request(vfy_core::selection::ci::PlanRequest {
             path: Path::new(&path),
