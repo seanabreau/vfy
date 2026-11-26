@@ -3,7 +3,7 @@
 use crate::results::{NativeRunResult, native_run_result};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyString};
+use pyo3::types::{PyDict, PyList, PyModule, PyString, PyTuple};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -163,7 +163,6 @@ struct FixtureBinding {
     autouse: bool,
     origin: FixtureOrigin,
     parameters: Option<Vec<Py<PyAny>>>,
-    ids: Option<Py<PyAny>>,
 }
 
 impl TestBinding {
@@ -498,6 +497,17 @@ impl<'py> Collector<'py> {
     ) -> PyResult<()> {
         let fixture = &self.fixtures[id.index()];
         let definition = &declared.metadata;
+        let attribute = |name: &str| -> PyResult<Py<PyAny>> {
+            Ok(definition
+                .get_item(name)?
+                .map_or_else(|| self.py.None(), Bound::unbind))
+        };
+        let attributes = fixture_binding::FixtureDefinitionAttributes {
+            argnames: PyTuple::new(self.py, &fixture.dependencies)?.unbind(),
+            baseid: origin.public_baseid(&fixture.package_baseid).to_owned(),
+            params: attribute("params")?,
+            ids: attribute("ids")?,
+        };
         self.fixture_bindings.push(FixtureBinding {
             runtime: fixture_binding::NativeFixtureBinding::new(
                 self.py,
@@ -505,14 +515,11 @@ impl<'py> Collector<'py> {
                 fixture.name.clone(),
                 fixture.declared_scope,
                 declared.callable.unbind(),
+                attributes,
             )?,
             definition: declaration.unbind(),
             parameters,
             origin,
-            ids: definition
-                .get_item("ids")?
-                .filter(|value| !value.is_none())
-                .map(Bound::unbind),
             autouse: definition
                 .get_item("autouse")?
                 .map_or(Ok(false), |value| value.is_truthy())?,
