@@ -157,7 +157,9 @@ vfy supports the subset described in [Compatibility](../about/compatibility.md).
 | `@pytest.mark.no_cover` | Leaves the marked test's call phase out of coverage |
 
 Without `--cov-report`, vfy writes the terminal report. `term` and `term-missing`
-accept `:skip-covered`. File reports accept a destination after `:`, and Markdown goes
+accept `:skip-covered`. As in pytest-cov, `term-missing` and `:skip-covered`
+turn on `[report] show_missing` and `skip_covered`; without them, the
+configured values apply. File reports accept a destination after `:`, and Markdown goes
 to `coverage.md` by default. `markdown` is a vfy addition. Machine-readable formats
 can differ from pytest-cov in the ways listed in
 [Compatibility](../about/compatibility.md#analysis-and-reports).
