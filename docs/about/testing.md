@@ -315,7 +315,7 @@ uv run pytest -q tests/integration/test_documentation.py tests/integration/test_
 ```
 
 Mark an executable block with `<!-- doc-test: name -->` immediately before its
-fence. Names are unique within each page. Console blocks have one `$ ` command
+fence. Names are unique within each page. Console blocks have one shell command
 per line. Tests substitute the installed interpreter for `uv run vfy` and
 `uv run pytest`, so wheel tests exercise the wheel under review. Python blocks
 are run or written as shown. CI recipes use inline `run:` commands. The
