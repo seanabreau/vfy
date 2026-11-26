@@ -5,19 +5,28 @@ use std::collections::{BTreeMap, BTreeSet};
 use ruff_python_ast::{ExceptHandler, Expr, Pattern, Stmt};
 use ruff_text_size::Ranged;
 
-use super::{Arc, ExitDescription, Locator, WithJump, constant_test};
+use super::{Arc, ExitDescription, Locator, WithHeaderExit, WithJump, constant_test};
 
 #[derive(Clone, Copy)]
 enum Continuation {
     Fallthrough(i32),
+    /// Normal completion of a `with` suite, which continues at the line.
+    WithSuiteExit(i32, WithSuite),
     // Retain the cleanup destination for measured with-statement rewrites.
     Abrupt(i32),
+}
+
+/// Whether a `with` statement itself ends the suite of an enclosing `with`.
+#[derive(Clone, Copy)]
+enum WithSuite {
+    Outermost,
+    Nested,
 }
 
 impl Continuation {
     fn destination(self) -> i32 {
         match self {
-            Self::Fallthrough(line) | Self::Abrupt(line) => line,
+            Self::Fallthrough(line) | Self::WithSuiteExit(line, _) | Self::Abrupt(line) => line,
         }
     }
 }
@@ -89,7 +98,7 @@ impl BranchCollector<'_> {
     }
 
     fn add(&mut self, start: i32, end: Continuation) {
-        if let Continuation::Fallthrough(end) = end
+        if let Continuation::Fallthrough(end) | Continuation::WithSuiteExit(end, _) = end
             && start != end
         {
             self.arcs.insert((start, end));
@@ -107,18 +116,46 @@ impl BranchCollector<'_> {
         after: Continuation,
     ) -> SuiteFlow {
         // Cleanup rewrites affect measured arcs, so keep them out of excluded suites.
-        if !self.excluded.contains(&line)
+        let jump = if !self.excluded.contains(&line)
             && let (Some(first), Some(last)) =
                 (with_statement.body.first(), with_statement.body.last())
         {
+            // Push before the suite so enclosing rewrites apply before nested ones.
             self.with_jumps.push(WithJump {
                 header: line,
                 body_start: self.locator.statement_line(first),
                 body_end: self.locator.line(last.range().end().to_usize()),
                 after: after.destination(),
+                header_exit: WithHeaderExit::Removed,
             });
+            Some(self.with_jumps.len() - 1)
+        } else {
+            None
+        };
+        let suite_exit = match after {
+            Continuation::WithSuiteExit(destination, _) => {
+                Continuation::WithSuiteExit(destination, WithSuite::Nested)
+            }
+            Continuation::Fallthrough(destination) => {
+                Continuation::WithSuiteExit(destination, WithSuite::Outermost)
+            }
+            Continuation::Abrupt(destination) => Continuation::Abrupt(destination),
+        };
+        let flow = self.block(&with_statement.body, suite_exit);
+        // Coverage.py rewrites each exit through a `with` header to the statement
+        // after the outermost `with` of a chain whose suites each end in the next
+        // `with`. Its rewrite removes that arc only from the two outermost headers,
+        // so every deeper header that completes keeps it as a second branch.
+        if flow.falls_through
+            && let Continuation::WithSuiteExit(destination, WithSuite::Nested) = after
+        {
+            self.add(line, self.entry(&with_statement.body, suite_exit));
+            self.add(line, Continuation::Fallthrough(destination));
+            if let Some(index) = jump {
+                self.with_jumps[index].header_exit = WithHeaderExit::Retained;
+            }
         }
-        self.block(&with_statement.body, after)
+        flow
     }
 
     fn block(&mut self, body: &[Stmt], after: Continuation) -> SuiteFlow {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use fancy_regex::Regex;
 
-use crate::analysis::{WithJump, partial_lines};
+use crate::analysis::{WithHeaderExit, WithJump, partial_lines};
 use crate::data::CoverageData;
 
 use super::{
@@ -56,11 +56,51 @@ fn normalizes_cpython_with_cleanup_arcs() {
         body_start: 131,
         body_end: 134,
         after: 135,
+        header_exit: WithHeaderExit::Removed,
     }];
 
     assert_eq!(
         fix_with_jumps(observed, &jumps),
         BTreeSet::from([(131, 132), (131, 135)])
+    );
+}
+
+#[test]
+fn chained_with_cleanup_keeps_retained_header_exits() {
+    // with a:            # 1
+    //     with b:        # 2
+    //         with c:    # 3
+    //             with d:  # 4
+    //                 x()  # 5
+    // y()                # 6
+    let jump = |header, header_exit| WithJump {
+        header,
+        body_start: header + 1,
+        body_end: 5,
+        after: 6,
+        header_exit,
+    };
+    let jumps = [
+        jump(1, WithHeaderExit::Removed),
+        jump(2, WithHeaderExit::Removed),
+        jump(3, WithHeaderExit::Retained),
+        jump(4, WithHeaderExit::Retained),
+    ];
+    let observed = BTreeSet::from([
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (5, 4),
+        (4, 3),
+        (3, 2),
+        (2, 1),
+        (1, 6),
+    ]);
+
+    assert_eq!(
+        fix_with_jumps(observed, &jumps),
+        BTreeSet::from([(1, 2), (2, 3), (3, 4), (3, 6), (4, 5), (4, 6), (5, 6)])
     );
 }
 
