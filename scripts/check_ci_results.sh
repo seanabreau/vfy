@@ -11,22 +11,39 @@ require_result() {
     fi
 }
 
+require_selected() {
+    local job=$1 selection=$2
+    local selected=${!selection:-missing}
+    case "$selected" in
+        true) require_result "$job" success ;;
+        false) require_result "$job" skipped ;;
+        *)
+            echo "$selection: expected true or false, got $selected" >&2
+            exit 1
+            ;;
+    esac
+}
+
 for job in CHANGE_SCOPE REPOSITORY SUPPLY_CHAIN WORKFLOW_SECURITY; do
     require_result "$job" success
 done
 
 case "${SCOPE:-}" in
     documentation)
-        required=(DOCUMENTATION)
-        skipped=(QUALITY RUST_MATRIX FULL_BUILD FULL_WHEEL FAST_BUILD FAST_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
+        require_result CHECK_DOCS true
+        wheel=skipped
+        rust=skipped
         ;;
-    code|tests)
-        required=(QUALITY FAST_BUILD FAST_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
-        skipped=(DOCUMENTATION RUST_MATRIX FULL_BUILD FULL_WHEEL)
+    code)
+        wheel=success
+        rust=skipped
         ;;
-    platform|unknown)
-        required=(QUALITY RUST_MATRIX FULL_BUILD FULL_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
-        skipped=(DOCUMENTATION FAST_BUILD FAST_WHEEL)
+    rust|unknown)
+        if [[ "$SCOPE" == unknown ]]; then
+            require_result CHECK_DOCS true
+        fi
+        wheel=success
+        rust=success
         ;;
     *)
         echo "unexpected CI scope: ${SCOPE:-missing}" >&2
@@ -34,9 +51,12 @@ case "${SCOPE:-}" in
         ;;
 esac
 
-for job in "${required[@]}"; do
-    require_result "$job" success
-done
-for job in "${skipped[@]}"; do
-    require_result "$job" skipped
-done
+require_selected DOCUMENTATION CHECK_DOCS
+require_selected RELEASE CHECK_RELEASE
+require_selected NATIVE_CORPUS CHECK_CORPUS
+if [[ "$CHECK_RELEASE" == true ]]; then
+    wheel=skipped
+    rust=skipped
+fi
+require_result LINUX_WHEEL "$wheel"
+require_result RUST "$rust"

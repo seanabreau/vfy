@@ -393,13 +393,15 @@ def _candidate_phase_records(
     root: Path,
     expected_outcomes: dict[str, str],
     phase_outcomes: dict[str, dict[str, str]] | None,
+    *,
+    engine: str = "pytest-runner-native-v1",
 ) -> list[dict[str, str]]:
     expected_nodeids = list(expected_outcomes)
     if not native_result.is_file():
         raise RuntimeError("candidate native result artifact was not written")
     record = json.loads(native_result.read_text(encoding="utf-8"))
-    if record.get("engine") != "pytest-runner-native-v1":
-        raise RuntimeError("candidate did not publish its native run result")
+    if record.get("engine") != engine:
+        raise RuntimeError(f"candidate did not publish the {engine} run result")
     cases = record.get("cases")
     if not isinstance(cases, list):
         raise RuntimeError(f"candidate native result cases are invalid: {cases}")
@@ -589,7 +591,7 @@ def run_unsupported_case(
 
 
 def check_default_native_route(destination: Path, candidate_python: Path) -> dict[str, object]:
-    """Prove that an unqualified product run is executed by the native engine."""
+    """Prove that an unqualified product run uses the independent engine."""
     project = VfyProject(destination / "default-native-route")
     event = destination / "default-native-route-events.txt"
     native_result = destination / "default-native-route-result.json"
@@ -611,11 +613,11 @@ def check_default_native_route(destination: Path, candidate_python: Path) -> dic
         "src",
         "--cov-branch",
         "--cov-context=test",
+        f"--native-result-json={native_result}",
         "test_contract.py",
         env={
             "PYTHONPATH": None,
             "VFY_NATIVE_BOUNDARY_EVENT": str(event),
-            "PYTEST_NATIVE_RESULT": str(native_result),
         },
     )
     status, stdout, stderr = completed.returncode, completed.stdout, completed.stderr
@@ -624,22 +626,23 @@ def check_default_native_route(destination: Path, candidate_python: Path) -> dic
         "test_contract.py::test_no_cover_marker": "passed",
         "test_contract.py::test_no_cover_fixture": "passed",
     }
-    phases = assert_run_evidence(
-        project,
+    phases = _candidate_phase_records(
         native_result,
+        project.root,
         expected_outcomes,
-        candidate=True,
+        None,
+        engine="vfy-independent-v1",
     )
     events = event.read_text(encoding="utf-8") if event.is_file() else ""
     coverage_path = project.root / ".coverage"
     if status != 0 or events != "measured\nmarker\nfixture\n" or not coverage_path.is_file():
         raise RuntimeError(
-            "candidate default route did not execute through the native engine: "
+            "candidate default route did not execute through the independent engine: "
             f"status={status} events={events!r}\n{stdout}\n{stderr}"
         )
     return {
         "exit_status": status,
-        "engine": "pytest-native",
+        "engine": "vfy-independent-v1",
         "events": events.splitlines(),
         "coverage": normalized_coverage(coverage_path, project.root),
         "phases": phases,
@@ -1152,13 +1155,15 @@ def test_exit_after_acceptance():
             or not event.is_file()
             or event.read_text(encoding="utf-8") != "completed\naccepted\n"
             or result_path.read_bytes() != RESULT_SENTINEL
-            or native_result.read_bytes() != RESULT_SENTINEL
+            or (not candidate and native_result.read_bytes() != RESULT_SENTINEL)
         ):
             raise RuntimeError(
                 f"{name} vfy did not preserve accepted interruption evidence: "
                 f"{status}\n{stdout}\n{stderr}"
             )
         expected_nodeid = "test_contract.py::test_completed_before_interrupt"
+        if candidate:
+            _candidate_phase_records(native_result, project.root, {expected_nodeid: "passed"}, None)
         normalized_history = normalized_history_tests(project)
         expected_history = normalized_history.get(expected_nodeid)
         history_entries = (
@@ -1268,14 +1273,18 @@ def check_coverage_save_failure(
     tests = """import os
 from pathlib import Path
 
+from src.sample import measured
+
 
 def test_coverage_save_fails(request):
-    coverage = request.config.pluginmanager.getplugin("_cov").coverage
+    data = request.config.pluginmanager.getplugin("_cov").coverage.data
 
-    def fail_save():
+    def fail_save(*args, **kwargs):
         raise OSError("expected coverage save failure")
 
-    coverage.save = fail_save
+    data.write = fail_save
+    data._publish = fail_save
+    assert measured(True) == 42
     Path(os.environ["VFY_NATIVE_BOUNDARY_EVENT"]).write_text("ran\\n")
 """
     runs: dict[str, dict[str, object]] = {}
@@ -1316,7 +1325,12 @@ def test_coverage_save_fails(request):
             tests=tests,
             native_bridge=native_bridge,
         )
-        if status == 0 or not event.is_file() or event.read_text(encoding="utf-8") != "ran\n":
+        if (
+            status == 0
+            or "expected coverage save failure" not in stdout + stderr
+            or not event.is_file()
+            or event.read_text(encoding="utf-8") != "ran\n"
+        ):
             raise RuntimeError(
                 f"{name} vfy did not surface coverage save failure: {status}\n{stdout}\n{stderr}"
             )
@@ -1599,9 +1613,8 @@ def main() -> None:
                 "missing_coverage_adapter": missing_coverage_adapter,
                 "unsupported": unsupported,
                 "integration_status": (
-                    "default serial synchronous native vfy coverage and no-coverage "
-                    "execution are parity-checked; explicit pytest execution remains available "
-                    "for internal differentials; "
+                    "the default independent engine is checked through the public CLI; "
+                    "coverage and no-coverage parity are checked against stock pytest; "
                     "unsupported modes reject during bounded preflight"
                 ),
             },
