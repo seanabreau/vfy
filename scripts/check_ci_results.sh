@@ -17,16 +17,20 @@ done
 
 case "${SCOPE:-}" in
     documentation)
-        required=(DOCUMENTATION)
-        skipped=(QUALITY RUST_MATRIX FULL_BUILD FULL_WHEEL FAST_BUILD FAST_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
+        require_result CHECK_DOCS true
+        require_result LINUX_WHEEL skipped
+        require_result RUST skipped
         ;;
-    code|tests)
-        required=(QUALITY FAST_BUILD FAST_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
-        skipped=(DOCUMENTATION RUST_MATRIX FULL_BUILD FULL_WHEEL)
+    code)
+        require_result LINUX_WHEEL success
+        require_result RUST skipped
         ;;
-    platform|unknown)
-        required=(QUALITY RUST_MATRIX FULL_BUILD FULL_WHEEL NATIVE_PYTEST NATIVE_ADOPTION)
-        skipped=(DOCUMENTATION FAST_BUILD FAST_WHEEL)
+    rust|unknown)
+        if [[ "$SCOPE" == unknown ]]; then
+            require_result CHECK_DOCS true
+        fi
+        require_result LINUX_WHEEL success
+        require_result RUST success
         ;;
     *)
         echo "unexpected CI scope: ${SCOPE:-missing}" >&2
@@ -34,9 +38,11 @@ case "${SCOPE:-}" in
         ;;
 esac
 
-for job in "${required[@]}"; do
-    require_result "$job" success
-done
-for job in "${skipped[@]}"; do
-    require_result "$job" skipped
-done
+case "${CHECK_DOCS:-}" in
+    true) require_result DOCUMENTATION success ;;
+    false) require_result DOCUMENTATION skipped ;;
+    *)
+        echo "unexpected documentation check selection: ${CHECK_DOCS:-missing}" >&2
+        exit 1
+        ;;
+esac

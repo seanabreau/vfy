@@ -59,10 +59,10 @@ and recovery. Keyboard interrupt preserves prior native cache files.
 
 ## Required adoption subset
 
-The regular [CI workflow](https://github.com/seanabreau/vfy/blob/main/.github/workflows/ci.yml)
+The [release workflow](https://github.com/seanabreau/vfy/blob/main/.github/workflows/release.yml)
 checks pinned iniconfig, sortedcontainers, pluggy, colorama, and Rich projects
-on Linux CPython 3.12. See [CI change classification](testing.md#ci-change-classification)
-for when this gate is required. It reuses the tier's Linux wheel and build manifest.
+on Linux CPython 3.12. The check uses the release wheel and its build manifest.
+See [Release validation](testing.md#release-validation) for the publishing gate.
 
 `validation/pytest_runner/check_native_adoption_matrix.py --required-subset`
 compares stock pytest with explicit `vfy test --engine=pytest-native` using one and two
@@ -232,8 +232,8 @@ This optional matrix does not change the required five-project CI subset.
 ## Installed-wheel CI
 
 The [native pytest workflow](https://github.com/seanabreau/vfy/blob/main/.github/workflows/native-pytest.yml)
-is configured for Linux and macOS with Python 3.12–3.15. It runs on pushes to `main`
-that touch native execution and on manual dispatch, not on pull requests. It installs matching artifacts
+is configured for Linux and macOS with Python 3.12–3.15. It runs weekly on
+`main` and on manual dispatch. It installs matching artifacts
 in separate reference and candidate environments, runs the integration suites
 and focused differential checkers, then compares the
 [pinned upstream corpus](pytest-test-suite.md).

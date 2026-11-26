@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Classify changes into conservative CI tiers.
+"""Select the additional checks required by a pull request.
 
-The classifier intentionally treats unknown files as platform-sensitive. It is
-used by CI only; local development can pass explicit paths to inspect a plan.
+Pass explicit paths to inspect a plan locally. Missing or unrecognized paths
+require the Linux wheel, Rust, and documentation checks.
 """
 
 from __future__ import annotations
@@ -24,39 +24,35 @@ DOC_PATHS = (
     "SECURITY.md",
     "mkdocs.yml",
 )
-FULL_MATRIX_PATHS = (
-    ".github/",
+RUST_PATHS = (
+    "crates/",
     "Cargo.toml",
     "Cargo.lock",
     "rust-toolchain",
     "rust-toolchain.toml",
-    "crates/vfy/Cargo.toml",
-    "crates/vfy-core/Cargo.toml",
-    "crates/vfy/src/",
     "pyproject.toml",
     "uv.lock",
-)
-FULL_MATRIX_PYTHON_PATHS = (
-    "python/vfy/bootstrap/",
-    "python/vfy/collector.py",
-    "python/vfy/native.py",
-    "python/vfy/process_startup.py",
-    "python/vfy/pytest_plugin.py",
-    "python/vfy/pytest_reporting.py",
-    "python/vfy/run/",
-)
-FULL_MATRIX_TEST_PATHS = (
-    "tests/integration/test_api.py",
-    "tests/integration/test_rust_transactions.py",
-    "tests/integration/test_plugin.py",
-    "tests/integration/test_pytest_cov_compat.py",
-    "tests/integration/test_native_pytest_support.py",
+    "scripts/cargo-insta-test.sh",
+    "scripts/cargo-nextest.sh",
+    "scripts/cargo-test-env.sh",
+    "scripts/cargo-test.sh",
 )
 KNOWN_CODE_PATHS = (
+    ".github/",
     "benchmarks/",
-    "crates/vfy-core/src/",
     "python/vfy/",
+    "scripts/",
     "tests/",
+    "validation/",
+    "README.pypi.md",
+)
+DOC_BUILD_PATHS = (
+    "docs/",
+    "overrides/",
+    ".github/workflows/docs.yml",
+    "mkdocs.yml",
+    "pyproject.toml",
+    "uv.lock",
 )
 
 
@@ -65,8 +61,7 @@ class ChangePlan:
     """The CI jobs required for one set of repository paths."""
 
     scope: str
-    run_quality: bool
-    full_matrix: bool
+    check_docs: bool
 
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:
@@ -76,45 +71,24 @@ def _matches(path: str, patterns: tuple[str, ...]) -> bool:
     )
 
 
-def _is_documentation(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    return _matches(normalized, DOC_PATHS)
-
-
-def _is_platform_sensitive(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    return _matches(
-        normalized, (*FULL_MATRIX_PATHS, *FULL_MATRIX_PYTHON_PATHS, *FULL_MATRIX_TEST_PATHS)
-    )
-
-
-def _is_known_code(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    return _matches(normalized, KNOWN_CODE_PATHS)
-
-
 def classify(paths: list[str]) -> ChangePlan:
-    """Return a conservative tier for changed repository paths."""
+    """Return the required pull request checks for changed repository paths."""
 
     normalized = [path.replace("\\", "/") for path in paths if path]
     if not normalized:
-        return ChangePlan("unknown", True, True)
-    non_documentation = [path for path in normalized if not _is_documentation(path)]
+        return ChangePlan("unknown", True)
+    non_documentation = [path for path in normalized if not _matches(path, DOC_PATHS)]
     if not non_documentation:
-        return ChangePlan("documentation", False, False)
-    if any(
-        not _is_platform_sensitive(path) and not _is_known_code(path) for path in non_documentation
-    ):
-        return ChangePlan("unknown", True, True)
-    if any(_is_platform_sensitive(path) for path in non_documentation):
-        return ChangePlan("platform", True, True)
-    if all(path.startswith(("tests/", "benchmarks/")) for path in non_documentation):
-        return ChangePlan("tests", True, False)
-    return ChangePlan("code", True, False)
+        return ChangePlan("documentation", True)
+    if any(not _matches(path, (*RUST_PATHS, *KNOWN_CODE_PATHS)) for path in non_documentation):
+        return ChangePlan("unknown", True)
+    check_docs = any(_matches(path, DOC_BUILD_PATHS) for path in normalized)
+    scope = "rust" if any(_matches(path, RUST_PATHS) for path in non_documentation) else "code"
+    return ChangePlan(scope, check_docs)
 
 
 def changed_paths(base: str | None) -> list[str]:
-    """Read changed paths from Git; an empty result requests the full CI matrix."""
+    """Read changed paths from Git, falling back to the conservative plan."""
 
     if base:
         completed = subprocess.run(
@@ -131,8 +105,7 @@ def changed_paths(base: str | None) -> list[str]:
 
 def _write_outputs(plan: ChangePlan, output: TextIO) -> None:
     print(f"scope={plan.scope}", file=output)
-    print(f"run_quality={str(plan.run_quality).lower()}", file=output)
-    print(f"full_matrix={str(plan.full_matrix).lower()}", file=output)
+    print(f"check_docs={str(plan.check_docs).lower()}", file=output)
 
 
 def main() -> int:
