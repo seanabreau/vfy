@@ -37,9 +37,21 @@ and escaped characters. For each changed Python file:
    [when vfy runs the full suite](#when-vfy-runs-the-full-suite).
 
 Rule 2 also applies when a body runs during import, collection, or fixture setup
-or teardown; uses a decorator outside the supported list; or changes whether
-the function is a generator. If the baseline includes decision coverage, vfy
-selects by file and imports rather than narrowing to edited functions.
+or teardown; uses a decorator other than those listed below; or changes whether
+the function is a generator. These decorators return the function itself or a
+descriptor that calls it on every access, so rule 1 still applies:
+
+- `property`, `staticmethod`, `classmethod`, and a property's `.getter`,
+  `.setter`, or `.deleter`;
+- `abstractmethod` or `abc.abstractmethod`;
+- `override` and `final`, bare or from `typing` or `typing_extensions`.
+
+vfy matches these names as written, without arguments. Any other decorator,
+such as `functools.cache`, can store or replace the function's result, so a
+test can reuse that result without running the edited lines.
+
+If the baseline includes decision coverage, vfy selects by file and imports
+rather than narrowing to edited functions.
 
 After a passing selected run, vfy combines fresh coverage with saved coverage
 for skipped tests, mapping line shifts in edited bodies. It also retains global
@@ -152,15 +164,15 @@ vfy prints a `Note:` line with the reason:
 
 `-k`, `-m`, `--deselect`, `--ignore`, `--ignore-glob`, and file targets in the
 pytest configuration's `addopts` define the suite. For example, with
-`addopts = -m "not slow"`, `vfy test --engine=pytest-native --all` records a baseline
+`addopts = -m "not slow"`, `vfy test --all` records a baseline
 without the slow tests, and later runs select from that suite. A change to `addopts` invalidates
 the baseline.
 
 `--cov-append` runs the full requested suite and appends to existing coverage.
 
-In CI, run `uv run vfy test --engine=pytest-native --all` for a complete result. A restored `.vfy/`
-baseline for the same commit would otherwise reuse the saved result without
-running tests.
+In CI, run `uv run vfy test --all` for a complete result. Without `--all`, a
+`pytest-native` run on a clean checkout whose restored `.vfy/` baseline matches
+the commit reuses the saved result without running tests.
 
 For example, editing a test file as well as `src/bounds.py` prints (abridged):
 
@@ -224,7 +236,7 @@ or replacing saved coverage or history. Portable baseline import and export,
 selection audits, and failure confirmation require `pytest-native` or `pytest`.
 
 Selection can be slower than a full run for cheap tests or broad changes. Compare
-whole-command times with `uv run vfy test --engine=pytest-native --all`; the duration estimates leave out
+whole-command times with `uv run vfy test --all`; the duration estimates leave out
 collection, baseline checks, and coverage rebuilding.
 
 ## Selection policies
@@ -251,5 +263,5 @@ compares selected tests and rebuilt coverage with full runs.
 Selection uses recorded data. It cannot see changes to external services,
 generated files, clocks, or nondeterministic fixtures. It also cannot see a value
 that one test computes and a later test reads from shared state, such as a
-module-level cache filled by an edited function. Use `uv run vfy test --engine=pytest-native --all` when
+module-level cache filled by an edited function. Use `uv run vfy test --all` when
 those inputs change.
