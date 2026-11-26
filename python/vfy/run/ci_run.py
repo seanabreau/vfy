@@ -22,6 +22,7 @@ from .execution import (
     _CONTROLLER_ENVIRONMENT,
     _configure_native_bridge_environment,
     _record_execution_evidence,
+    _version_query,
 )
 
 if TYPE_CHECKING:
@@ -83,22 +84,32 @@ def _run_pytest(
     return invocation.controller.run(pytest_args, environment, stdout="inherit")
 
 
-def _report_planned_selection(args: argparse.Namespace, planned: SelectionPlan) -> None:
-    """Report the plan before pytest's session output, which ends with its summary."""
-    if not args.plan_only:
+def _report_planned_selection(
+    args: argparse.Namespace, planned: SelectionPlan, pytest_args: list[str]
+) -> None:
+    if not args.plan_only and not _version_query(pytest_args):
         _controller_message(args, _selection_message(planned))
 
 
 def _report_bound_selection(
     args: argparse.Namespace, planned: SelectionPlan, bound: SelectionPlan
 ) -> None:
-    """Report the plan bound after collection when the run has not already shown it."""
+    """Report a changed selection or any reasons discovered during collection."""
     if planned.fallback_full or bound.fallback_full:
         changed = planned.fallback_full != bound.fallback_full
     else:
         changed = set(planned.selected) != set(bound.selected)
     if args.plan_only or changed:
         _controller_message(args, _selection_message(bound, collected=True))
+        return
+
+    reported_reasons = set(planned.reasons)
+    if planned.fallback_full:
+        # The CI request stores full-suite reasons as one string.
+        reported_reasons.add("; ".join(planned.reasons))
+    for reason in bound.reasons:
+        if reason not in reported_reasons:
+            _controller_message(args, f"Note: {reason}")
 
 
 def _run_ci_test_once(
@@ -163,7 +174,7 @@ def _run_ci_test_once(
         else:
             environment["VFY_TEST_HISTORY"] = invocation.history_path
             evidence = _capture_green_source_identity(args, config, invocation, evidence)
-        _report_planned_selection(args, plan)
+        _report_planned_selection(args, plan, pytest_args)
         started = _profile_begin()
         completed = _run_pytest(args, invocation, pytest_args, environment, stage)
         _profile_end("pytest", started)

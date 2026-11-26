@@ -127,6 +127,8 @@ def test_changed_scoped_collection_repeats_with_complete_collection(tmp_path: Pa
     rerun = project.run_vfy(*_ARGUMENTS).expect(0)
 
     assert "Collecting the complete suite to bind the selection" in rerun.stderr
+    assert "Full suite selected (after collection)" in rerun.stderr
+    assert "Collected tests: 4" in rerun.stderr
     assert "collected test inventory changed; running the full suite" in rerun.stderr
     assert sorted(_executed(tmp_path)) == [
         "test_first.py::test_first[a]",

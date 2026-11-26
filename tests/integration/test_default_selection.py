@@ -529,6 +529,7 @@ def test_status_lines_precede_the_pytest_summary_outside_git(
         assert status == []
     elif "--all" in arguments:
         assert status == [_FULL]
+        assert "Note: the complete suite was requested" in lines
     else:
         assert status == [_FULL, f"Note: {_GIT_UNAVAILABLE}"]
 
@@ -544,5 +545,6 @@ def test_selected_rerun_reports_its_plan_before_the_pytest_session(tmp_path: Pat
     summary = _line_index(lines, "1 passed in ")
     selected = lines.index("Selected 1 / 2 tests (from the saved baseline; collection follows)")
     assert selected < _line_index(lines, "test session starts")
+    assert _SKIPPED in lines[:summary]
     # Reuse is decided from the completed results, after pytest's summary.
     assert [line.split(";")[0] for line in lines[summary + 1 :]] == ["Reused 1 tests"]

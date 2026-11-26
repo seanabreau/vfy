@@ -93,18 +93,19 @@ def _selection_message(plan: SelectionPlan, *, collected: bool = False) -> str:
     if plan.location:
         lines.append(f"Tests reaching {plan.location}: {len(all_tests)}")
     elif plan.fallback_full:
-        lines.append("Running the full suite")
-        if all_tests:
-            lines.append(f"Known tests before collection: {len(all_tests)}")
+        if collected:
+            lines.append("Full suite selected (after collection)")
+            lines.append(f"Collected tests: {len(all_tests)}")
         else:
-            lines.append("Known tests before collection: unknown")
+            lines.append("Running the full suite")
+            lines.append(f"Known tests before collection: {len(all_tests) or 'unknown'}")
     else:
         inventory = (
             "after collection" if collected else "from the saved baseline; collection follows"
         )
         lines.append(f"Selected {len(selected)} / {len(all_tests)} tests ({inventory})")
         if len(selected) < len(all_tests):
-            lines.append(_SKIPPED_TESTS_NOTICE)
+            lines.append("`vfy test --all` runs everything")
     selected_seconds = plan.selected_seconds
     full_seconds = plan.full_seconds
     if selected_seconds is not None:
