@@ -142,6 +142,7 @@ vfy prints a `Note:` line with the reason:
 | Configuration, Python, installed packages or plug-ins, pytest arguments, or worker settings changed | Any test's behavior may have changed |
 | A `conftest.py`, a test file (`test_*.py`, `*_test.py`), or anything under `tests/` changed | Which tests exist, or what their fixtures do, may have changed |
 | A file is untracked, deleted, or renamed | The baseline can't map it to recorded tests |
+| A Git submodule's recorded commit changed, or the submodule is uninitialized, has uncommitted changes, or is checked out at another commit | vfy identifies a submodule only by the commit the repository records for it |
 | A changed file has no added executable Python line, such as a non-Python file or a comment or deletion-only edit outside a function | No recorded line ties the change to a test |
 | No recorded test reaches the changed code | An empty selection would test nothing |
 | The import graph can't be built or resolved for an affected file | Import-based selection can't be checked |

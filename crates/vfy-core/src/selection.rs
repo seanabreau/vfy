@@ -27,7 +27,7 @@ pub use sqlite_history::{TestHistoryLease, snapshot_test_history};
 pub use evidence::{green_test_run_valid, write_green_test_run};
 pub use git::{
     GitReplayState, read_git_replay_state, read_git_replay_state_at, read_green_git_head,
-    read_green_git_head_at,
+    read_green_git_head_at, read_submodule_change,
 };
 pub use graph::{ImportGraphResult, prepare_import_graph, publish_import_graph, static_dependents};
 pub use plan::{

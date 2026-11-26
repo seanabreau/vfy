@@ -25,6 +25,7 @@ class GitReplayState:
     untracked: bool
     deleted: bool
     patch: str
+    submodule_change: str | None = None
 
     @classmethod
     def from_rust(cls, value: GitReplayRecord) -> GitReplayState:
@@ -35,6 +36,7 @@ class GitReplayState:
             value["untracked"],
             value["deleted"],
             value["patch"],
+            value["submodule_change"],
         )
 
 

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -10,6 +11,7 @@ pub struct GitReplayState {
     pub untracked: bool,
     pub deleted: bool,
     pub patch: String,
+    pub submodule_change: Option<String>,
 }
 
 struct GitOutputs {
@@ -139,13 +141,7 @@ fn git_outputs_at(directory: &Path) -> Result<GitOutputs, String> {
 pub fn read_git_replay_state(ignored: &[String]) -> Result<GitReplayState, String> {
     let directory = std::env::current_dir()
         .map_err(|error| format!("failed to read current directory: {error}"))?;
-    let GitOutputs {
-        root,
-        head,
-        status,
-        patch,
-    } = git_outputs_at(&directory)?;
-    replay_state_from_outputs(&directory, &root, &head, &status, &patch, ignored)
+    read_git_replay_state_at(&directory, ignored)
 }
 
 /// Read replay state from the specified repository directory.
@@ -197,10 +193,16 @@ pub fn read_green_git_head_at(
             return Err(git_failure(operation, result));
         }
     }
-    Ok(status_changes(directory, &root, &status.stdout, ignored)
+    if !status_changes(directory, &root, &status.stdout, ignored)
         .changed
         .is_empty()
-        .then(|| String::from_utf8_lossy(&head.stdout).trim().to_owned()))
+        || submodule_change_at_root(&root)?.is_some()
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&head.stdout).trim().to_owned(),
+    ))
 }
 
 fn replay_state_from_outputs(
@@ -227,6 +229,7 @@ fn replay_state_from_outputs(
         untracked: changes.untracked,
         deleted: changes.deleted,
         patch: String::from_utf8_lossy(&patch.stdout).into_owned(),
+        submodule_change: submodule_change_at_root(root)?,
     })
 }
 
@@ -284,4 +287,188 @@ fn status_changes(
         untracked,
         deleted,
     }
+}
+
+/// What the Git index records for one tracked path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum IndexEntry {
+    /// File content: a regular file, executable, or symbolic link.
+    Blob,
+    /// A submodule, identified by the commit the superproject records for it.
+    Submodule { commit: String },
+}
+
+fn read_submodule_index(root: &Path) -> Result<BTreeMap<String, IndexEntry>, String> {
+    let result = output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["ls-files", "--stage", "-z"]),
+        "read the Git index",
+    )?;
+    if !result.status.success() {
+        return Err(git_failure("read the Git index", &result));
+    }
+    parse_index_records(
+        result
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|record| record.starts_with(b"160000 ")),
+    )
+}
+
+/// Parse `git ls-files --stage -z` records: `<mode> <object> <stage>\t<path>`.
+///
+/// An unmerged path has one record per stage and keeps its last record;
+/// [`submodule_change`] reports a submodule merge conflict separately.
+pub(crate) fn parse_index(output: &[u8]) -> Result<BTreeMap<String, IndexEntry>, String> {
+    parse_index_records(
+        output
+            .split(|byte| *byte == 0)
+            .filter(|record| !record.is_empty()),
+    )
+}
+
+fn parse_index_records<'a>(
+    records: impl Iterator<Item = &'a [u8]>,
+) -> Result<BTreeMap<String, IndexEntry>, String> {
+    let mut entries = BTreeMap::new();
+    for record in records {
+        let invalid = || {
+            format!(
+                "unexpected Git index record {:?}",
+                String::from_utf8_lossy(record)
+            )
+        };
+        let tab = record
+            .iter()
+            .position(|byte| *byte == b'\t')
+            .ok_or_else(invalid)?;
+        let mut fields = record[..tab].split(|byte| *byte == b' ');
+        let (Some(mode), Some(object), Some(_stage), None) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            return Err(invalid());
+        };
+        let path = String::from_utf8(record[tab + 1..].to_vec())
+            .map_err(|error| format!("Git index path is not UTF-8: {error}"))?;
+        // Mode 160000 is a gitlink: Git stores the submodule's commit, not content.
+        let entry = if mode == b"160000" {
+            if !matches!(object.len(), 40 | 64) || !object.iter().all(u8::is_ascii_hexdigit) {
+                return Err(invalid());
+            }
+            IndexEntry::Submodule {
+                commit: String::from_utf8_lossy(object).into_owned(),
+            }
+        } else {
+            IndexEntry::Blob
+        };
+        entries.insert(path, entry);
+    }
+    Ok(entries)
+}
+
+/// Explain why submodules require a full run when Git can resolve the working tree.
+///
+/// # Errors
+/// Returns an error if the resolved repository's submodule status is unavailable.
+pub fn read_submodule_change(directory: &Path) -> Result<Option<String>, String> {
+    let Ok(root) = repository_root(directory) else {
+        return Ok(None);
+    };
+    submodule_change_at_root(&root)
+}
+
+fn submodule_change_at_root(root: &Path) -> Result<Option<String>, String> {
+    submodule_change(root, &read_submodule_index(root)?)
+}
+
+/// Explain why the checked-out submodules cannot stand for their recorded commits.
+///
+/// Selection identifies a submodule by the commit its superproject records
+/// and never reads the submodule's files. That identity holds only while the
+/// submodule is initialized, clean, and checked out at that commit; otherwise
+/// this returns the reason the full suite must run.
+///
+/// # Errors
+/// Returns an error when Git cannot be launched or the status command fails.
+pub(super) fn submodule_change(
+    root: &Path,
+    index: &BTreeMap<String, IndexEntry>,
+) -> Result<Option<String>, String> {
+    let submodules: Vec<&str> = index
+        .iter()
+        .filter(|(_, entry)| matches!(entry, IndexEntry::Submodule { .. }))
+        .map(|(path, _)| path.as_str())
+        .collect();
+    if submodules.is_empty() {
+        return Ok(None);
+    }
+    for path in &submodules {
+        // Git status reports an empty, uninitialized submodule directory as unchanged.
+        let directory = root.join(path);
+        if !directory.join(".git").exists() {
+            let state = if directory.is_dir() {
+                "is not initialized"
+            } else {
+                "is missing"
+            };
+            return Ok(Some(format!("Git submodule {path} {state}")));
+        }
+    }
+    let result = output(
+        Command::new("git")
+            .current_dir(root)
+            .args([
+                "status",
+                "--porcelain=v2",
+                "-z",
+                // Configuration such as `submodule.<name>.ignore` can hide changes.
+                "--ignore-submodules=none",
+                "--untracked-files=normal",
+                "--",
+            ])
+            .args(submodules.iter().map(|path| format!(":(literal){path}"))),
+        "read Git submodule status",
+    )?;
+    if !result.status.success() {
+        return Err(git_failure("read Git submodule status", &result));
+    }
+    Ok(submodule_status_change(&result.stdout))
+}
+
+/// Describe the first entry of `git status --porcelain=v2 -z` output limited
+/// to submodule paths.
+pub(crate) fn submodule_status_change(status: &[u8]) -> Option<String> {
+    let mut entries = status.split(|byte| *byte == 0);
+    while let Some(entry) = entries.next() {
+        let text = String::from_utf8_lossy(entry);
+        // Changed, renamed, and unmerged entries have 8, 9, and 10 fields before the path.
+        let (count, conflict) = match text.as_bytes().first() {
+            Some(b'1') => (9, false),
+            Some(b'2') => {
+                // A renamed entry is followed by its original path.
+                entries.next();
+                (10, false)
+            }
+            Some(b'u') => (11, true),
+            _ => continue,
+        };
+        let fields: Vec<&str> = text.splitn(count, ' ').collect();
+        let [_, code, submodule, .., path] = fields.as_slice() else {
+            continue;
+        };
+        if fields.len() != count {
+            continue;
+        }
+        // `S<c><m><u>`: commit changed, tracked changes, untracked changes.
+        let state = match submodule.as_bytes() {
+            _ if conflict => "has a merge conflict",
+            [b'S', b'C', ..] => "is not checked out at its recorded commit",
+            [b'S', _, b'M', _] | [b'S', _, _, b'U'] => "has uncommitted changes",
+            _ if !code.starts_with('.') => "has a staged change",
+            _ => "has changed",
+        };
+        return Some(format!("Git submodule {path} {state}"));
+    }
+    None
 }
