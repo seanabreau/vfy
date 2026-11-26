@@ -1,20 +1,18 @@
 # CI and quality gates
 
-Run the full pytest suite, fail the job below a coverage threshold, and save
-reports for review. vfy replaces pytest-cov; pytest remains the runner.
+Run the full test suite with `vfy test`, fail the job below a coverage
+threshold, and save reports for review.
 
-Both coverage workflows on this page run from the root of the
+The workflows on this page run from the root of the
 [coverage example](../getting-started/quickstart.md), after you add its
-negative-value test. In that project, run `uv add --dev 'vfy[pytest]'` to install
-vfy and pytest, then commit `pyproject.toml`, `uv.lock`, the source, and the tests.
-Supported runners install a prebuilt wheel. Copy the full-suite workflow below
-into `.github/workflows/coverage.yml`.
+negative-value test. Commit `pyproject.toml`, `uv.lock`, the source, and the
+tests. Supported runners install a prebuilt wheel. Copy the full-suite workflow
+below into `.github/workflows/coverage.yml`.
 
-To run the same steps on your machine:
+To run the same check on your machine:
 
 ```console
-uv run pytest -p no:pytest_cov -p vfy.pytest_plugin --cov=src --cov-branch --cov-report=
-uv run vfy coverage report --show-missing --fail-under 100
+uv run vfy test --all --cov=src --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=100
 ```
 
 ## Run the full suite
@@ -37,14 +35,8 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: uv sync --locked
-      - name: Collect
-        run: uv run pytest -p no:pytest_cov -p vfy.pytest_plugin --cov=src --cov-branch --cov-report=
-      - name: Export XML
-        if: always()
-        run: uv run vfy coverage xml -o coverage.xml
-      - name: Enforce threshold
-        if: always()
-        run: uv run vfy coverage report --show-missing --fail-under 100
+      - name: Test
+        run: uv run vfy test --all --cov=src --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=100
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -56,12 +48,40 @@ jobs:
             coverage.xml
 ```
 
-The collection step runs every test. The later steps write `coverage.xml`,
-check the 100% coverage threshold, and upload the data. They run even after
-a test failure; a passing coverage gate does not clear that failure.
+The test step runs every test with `--all`, prints missing lines and branches,
+and writes `.coverage` and `coverage.xml`. It exits with status 1 when a test
+fails or total coverage is below `--cov-fail-under`, and writes the reports in
+both cases. The upload step runs with `if: always()` and warns if no file
+exists, for example after a usage error stops the run before collection.
 
-If collection fails before writing data, XML export and the threshold check
-also fail. The upload step warns if no artifact exists.
+Don't restore `.vfy/` from `actions/cache` between runs. `--all` replaces the
+saved baseline without reading it. Without `--all`, a `--engine=pytest-native`
+run on a commit that matches a restored baseline, such as a rerun of the same
+workflow, reuses the saved coverage without running tests.
+
+## Run pytest with vfy coverage
+
+Use pytest as the runner when your suite needs a plug-in that `vfy test` does
+not support; [check your suite](native-adoption.md) first. Install vfy with
+pytest by running `uv add --dev 'vfy[pytest]'`, then replace the test step with
+these steps. vfy's pytest plug-in replaces pytest-cov.
+
+<!-- doc-test: ci-pytest -->
+```yaml
+      - name: Collect
+        run: uv run pytest -p no:pytest_cov -p vfy.pytest_plugin --cov=src --cov-branch --cov-report=
+      - name: Export XML
+        if: always()
+        run: uv run vfy coverage xml -o coverage.xml
+      - name: Enforce threshold
+        if: always()
+        run: uv run vfy coverage report --show-missing --fail-under 100
+```
+
+The collection step runs every test. The later steps write `coverage.xml` and
+check the 100% coverage threshold. They run even after a test failure; a
+passing coverage gate does not clear that failure. If collection fails before
+writing data, XML export and the threshold check also fail.
 
 ## Split tests across two jobs
 
@@ -158,7 +178,7 @@ first.
 
 ## Enforce semantic coverage thresholds
 
-After [checking compatibility](native-adoption.md), replace the collection
+After [checking compatibility](native-adoption.md), replace the test
 step with this partial example to require decision, condition, and MC/DC
 (modified condition/decision) coverage. See [semantic coverage](semantic.md) for
 what each measure checks. The test run fails with status 1 for an unmet pytest
@@ -236,9 +256,9 @@ The baseline still comes from the current checkout.
 <a id="ci-selection-options"></a>
 
 Install `vfy[pytest]` for native selection and baseline controls. Use
-`vfy test --engine=pytest-native --all` for a complete CI run. Without `--all`, a restored
-`.vfy/` cache can select a subset of tests, or reuse saved coverage without
-running any tests. Use selection only when you intend to skip unaffected tests.
+`vfy test --all` for a complete CI run, and don't restore `.vfy/` from a cache;
+see [Run the full suite](#run-the-full-suite). Use selection only when you
+intend to skip unaffected tests.
 
 Transfer a passing baseline between checkouts with `--export-baseline` and
 `--baseline`. A baseline is the saved per-test coverage
