@@ -234,10 +234,10 @@ This optional matrix does not change the required five-project CI subset.
 The [native pytest workflow](https://github.com/seanabreau/vfy/blob/main/.github/workflows/native-pytest.yml)
 is configured for Linux and macOS with Python 3.12–3.15. It runs weekly on
 `main` and on manual dispatch. Pull requests that change its tooling run the
-Linux CPython 3.12 lane. The workflow installs matching artifacts
-in separate reference and candidate environments, runs the integration suites
-and focused differential checkers, then compares the
-[pinned upstream corpus](pytest-test-suite.md).
+Linux CPython 3.12 lane. That lane runs installed-wheel integration suites,
+focused differentials, pinned corpus inventory and rejection checks, and
+controlled execution comparisons. Weekly and manual runs also compare the
+full [pinned upstream corpus](pytest-test-suite.md).
 
 The installed-wheel lanes discover every `tests/integration/test_native_*.py`
 suite, including new fixture, reporting, worker, and version regressions.

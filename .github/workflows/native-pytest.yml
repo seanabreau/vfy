@@ -229,6 +229,7 @@ jobs:
             --candidate-python "$PWD/target/native-pytest/candidate/bin/python" \
             --output target/native-pytest/results/plugin-api
       - name: Execute and account for the full ordered corpus
+        if: ${{ !inputs.merge_check }}
         run: |
           uv run --no-sync python scripts/pytest_corpus_execution.py \
             --upstream-root target/native-pytest/upstream-pytest \
