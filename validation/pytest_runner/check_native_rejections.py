@@ -27,7 +27,8 @@ from pathlib import Path
 
 
 def test_runs():
-    Path(os.environ["PYTEST_NATIVE_REJECTION_EVENT"]).write_text("ran\\n", encoding="utf-8")
+    with Path(os.environ["PYTEST_NATIVE_REJECTION_EVENT"]).open("a", encoding="utf-8") as event:
+        event.write("ran\\n")
 """
 
 PLUGIN_TEST = """import os
@@ -128,9 +129,9 @@ from pathlib import Path
 
 def pytest_configure(config):
     del config
-    Path(os.environ["PYTEST_NATIVE_REJECTION_CONFIG_EVENT"]).write_text(
-        "configured\\n", encoding="utf-8"
-    )
+    path = Path(os.environ["PYTEST_NATIVE_REJECTION_CONFIG_EVENT"])
+    with path.open("a", encoding="utf-8") as event:
+        event.write("configured\\n")
 """
 
 COLLECTION_PLUGIN = """import os
@@ -139,9 +140,9 @@ from pathlib import Path
 
 def pytest_collection_modifyitems(session, config, items):
     del session, config, items
-    Path(os.environ["PYTEST_NATIVE_REJECTION_CONFIG_EVENT"]).write_text(
-        "collected\\n", encoding="utf-8"
-    )
+    path = Path(os.environ["PYTEST_NATIVE_REJECTION_CONFIG_EVENT"])
+    with path.open("a", encoding="utf-8") as event:
+        event.write("collected\\n")
 """
 
 RUNLOOP_REPLACEMENT_PLUGIN = """import os
@@ -154,17 +155,6 @@ def pytest_runtestloop(session):
         "replaced\\n", encoding="utf-8"
     )
     return True
-"""
-
-CONFIGURE_HOOK = """import os
-from pathlib import Path
-
-
-def pytest_configure(config):
-    del config
-    Path(os.environ["PYTEST_NATIVE_REJECTION_CONFIG_EVENT"]).write_text(
-        "configured\\n", encoding="utf-8"
-    )
 """
 
 
@@ -181,8 +171,6 @@ class Rejection:
 
 REJECTIONS = (
     Rejection("runtime-plugin", ("-p", "runtime_plugin"), "runtime_plugin"),
-    Rejection("configure-plugin", ("-p", "configure_plugin"), "pytest_configure"),
-    Rejection("collection-plugin", ("-p", "collection_plugin"), "pytest_collection_modifyitems"),
     Rejection(
         "runloop-replacement-plugin", ("-p", "runloop_replacement_plugin"), "pytest_runtestloop"
     ),
@@ -501,6 +489,36 @@ def run_case(
     command.extend((*arguments, "test_contract.py"))
     completed = run_captured(command, cwd=project, env=environment, timeout=120)
     return completed.returncode, completed.stdout, completed.stderr
+
+
+def check_supported_hooks(
+    python: Path, project: Path, event: Path, config_event: Path
+) -> dict[str, dict[str, object]]:
+    """Check that supported configuration and collection hooks run once."""
+    observations: dict[str, dict[str, object]] = {}
+    conftest = project / "conftest.py"
+    conftest.write_text(CONFIGURE_PLUGIN, encoding="utf-8")
+    for name, arguments, hook_event in (
+        ("configure_hook", (), "configured\n"),
+        ("configure-plugin", ("-p", "configure_plugin"), "configured\n"),
+        ("collection-plugin", ("-p", "collection_plugin"), "collected\n"),
+    ):
+        event.unlink(missing_ok=True)
+        config_event.unlink(missing_ok=True)
+        status, stdout, stderr = run_case(python, project, event, config_event, *arguments)
+        if (
+            status != 0
+            or not event.is_file()
+            or event.read_text(encoding="utf-8") != "ran\n"
+            or not config_event.is_file()
+            or config_event.read_text(encoding="utf-8") != hook_event
+        ):
+            raise RuntimeError(
+                f"{name}: expected hook and test to run once, got {status}\n{stdout}\n{stderr}"
+            )
+        observations[name] = {"exit_status": status, "executed_once": True}
+        conftest.unlink(missing_ok=True)
+    return observations
 
 
 def cache_files(project: Path) -> dict[str, bytes]:
@@ -1011,20 +1029,7 @@ def main() -> None:
         raise RuntimeError(f"ordinary native execution failed: {status}\n{stdout}\n{stderr}")
     observations["ordinary"] = {"exit_status": status}
 
-    conftest.write_text(CONFIGURE_HOOK, encoding="utf-8")
-    event.unlink(missing_ok=True)
-    config_event.unlink(missing_ok=True)
-    status, stdout, stderr = run_case(args.candidate_python, project, event, config_event)
-    if (
-        status != 0
-        or event.read_text(encoding="utf-8") != "ran\n"
-        or config_event.read_text(encoding="utf-8") != "configured\n"
-    ):
-        raise RuntimeError(
-            f"supported configure hook did not run once: {status}\n{stdout}\n{stderr}"
-        )
-    observations["configure_hook"] = {"exit_status": status, "executed_once": True}
-    conftest.unlink()
+    observations.update(check_supported_hooks(args.candidate_python, project, event, config_event))
 
     test.write_text(FAILURE_TEST, encoding="utf-8")
     event.unlink(missing_ok=True)
