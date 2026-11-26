@@ -293,11 +293,9 @@ class TracebackEntry:
         """
         hide: object = False
         for namespace in (self.frame.f_locals, self.frame.f_globals):
-            # `exec` and `eval` can supply namespaces of any type; like pytest,
-            # any failed lookup leaves the decision to the next namespace.
             try:
                 hide = namespace["__tracebackhide__"]
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - pytest treats any failed namespace lookup as absent
                 continue
             break
         if hide and callable(hide):
