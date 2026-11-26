@@ -299,8 +299,13 @@ class IndependentCoverage:
         reports = dict(self.options.cov_report) or {"term": None}
         if set(reports) == {""}:
             reports = {}
+        if not (reports or self.options.cov_fail_under or self.options.cov_decisions):
+            return
         precision = self.options.cov_precision
         assert precision is not None
+        reporter = cast(
+            "TerminalReporter | None", session.config.pluginmanager.getplugin("terminalreporter")
+        )
         if reports or self.options.cov_fail_under:
             self.report.write(coverage_heading())
         try:
@@ -317,23 +322,19 @@ class IndependentCoverage:
             )
         except VfyError as error:
             message = f"Failed to generate report: {error}\n"
-            reporter = cast(
-                "TerminalReporter", session.config.pluginmanager.getplugin("terminalreporter")
-            )
-            reporter.write(f"\nWARNING: {message}\n", red=True, bold=True)
+            if reporter is not None:
+                reporter.write(f"\nWARNING: {message}\n", red=True, bold=True)
             warnings.warn(CovReportWarning(message), stacklevel=1)
             total, semantic = 0.0, None
         self.total = total
         threshold = self.options.cov_fail_under if self._enforce_thresholds else None
         if threshold is not None and _coverage_threshold_failed(total, threshold, precision):
-            reporter = cast(
-                "TerminalReporter", session.config.pluginmanager.getplugin("terminalreporter")
-            )
-            reporter.write(
-                f"\nERROR: {_coverage_failure_message(total, threshold, precision)}\n",
-                red=True,
-                bold=True,
-            )
+            if reporter is not None:
+                reporter.write(
+                    f"\nERROR: {_coverage_failure_message(total, threshold, precision)}\n",
+                    red=True,
+                    bold=True,
+                )
             session.testsfailed += 1
             session.exitstatus = 1
         if semantic is not None and self._enforce_thresholds:

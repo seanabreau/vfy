@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .cli_output import _message, _report_color, _writes_stdout
-from .errors import VfyError
+from .errors import NoDataError, VfyError
 from .native import pytest_coverage_threshold_failed
 from .store_loader import _load_store
 
@@ -184,8 +184,7 @@ def _data_command(args: argparse.Namespace, config: Config) -> int:
             aliases=[list(paths) for paths in config.get("paths", {}).values()],
         )
         if store is None:
-            _message(args, "No data to combine")
-            return 0
+            raise NoDataError("No data to combine")
         _message(args, f"Combined {count} data file(s) into {args.data_file}")
         return 0
 
@@ -243,6 +242,8 @@ def _report_command(args: argparse.Namespace, report_config: ReportConfig, confi
         ignore_errors=args.ignore_errors,
         line_contexts=args.command == "json" and bool(args.show_contexts),
     )
+    if not rows:
+        raise NoDataError("No data to report.")
     if args.command == "report":
         if args.format == "markdown":
             content = render_markdown(
