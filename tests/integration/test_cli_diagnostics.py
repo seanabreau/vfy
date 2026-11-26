@@ -317,7 +317,7 @@ def test_missing_source_and_ignore_errors(
     assert captured.err == "vfy: error: No data to report.\n"
 
 
-def test_combine_without_shards_is_strictly_optional(
+def test_combine_without_shards_keeps_the_strict_diagnostic(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(["coverage", "combine", "--strict"]) == 1

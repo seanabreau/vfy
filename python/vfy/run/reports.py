@@ -100,9 +100,18 @@ def _write_coverage_reports(
         write_pytest_reports,
     )
 
+    reports = _pytest_reports(pytest_args)
+    threshold_value = _pytest_option(pytest_args, "--cov-fail-under")
+    threshold = (
+        float(threshold_value)
+        if threshold_value is not None
+        else config.get("report", {}).get("fail_under")
+    )
     decisions = "--cov-decisions" in pytest_args or bool(
         config.get("vfy", {}).get("run", {}).get("decisions", False)
     )
+    if not (reports or threshold or decisions):
+        return True
     cov_config = _pytest_option(pytest_args, "--cov-config")
     coverage = Coverage(
         data_file=args.data_file,
@@ -125,7 +134,7 @@ def _write_coverage_reports(
         with coverage._report_batch():
             total, semantic = write_pytest_reports(
                 coverage,
-                _pytest_reports(pytest_args),
+                reports,
                 config,
                 sys.stdout,
                 precision=precision,
@@ -139,12 +148,6 @@ def _write_coverage_reports(
         total, semantic = 0.0, None
     if os.environ.get("VFY_MUTATION_BASELINE_COVERAGE") == "implicit":
         return True
-    threshold_value = _pytest_option(pytest_args, "--cov-fail-under")
-    threshold = (
-        float(threshold_value)
-        if threshold_value is not None
-        else config.get("report", {}).get("fail_under")
-    )
     threshold_failed = threshold is not None and pytest_coverage_threshold_failed(
         total, float(threshold), precision
     )

@@ -1097,7 +1097,7 @@ class VfyCovPlugin:
 
             reconstruct_selected_coverage(self.coverage)
         should_report = (
-            self._reports or self._fail_under() is not None or self.options.cov_decisions
+            self._reports or self._fail_under() or self.options.cov_decisions
         ) and not (failed and self.options.no_cov_on_fail)
         if should_report:
             try:
