@@ -66,7 +66,7 @@ checks with `uv run pytest -q tests/repository`. Shared process helpers live in
 | Diagnostics and invalid configuration | Streams, exit statuses, and absence of work | `uv run pytest -q tests/integration/test_cli_diagnostics.py` |
 | Built-in asyncio | Differential tests against pytest-asyncio 1.4.0 | `uv run pytest -q tests/integration/test_asyncio.py` |
 | Built-in HTML and metadata | Reports, hooks, redaction, and publication | `uv run pytest -q tests/integration/test_pytest_html.py` |
-| Installed artifacts | Fast Linux wheel lane and full platform wheel matrix | CI `wheel-fast` or `wheel` job, plus `native-pytest` |
+| Installed artifacts | Linux wheel on pull requests, platform and Python matrix for release candidates | CI `linux-wheel` and Release `release-tests` |
 | Repository health | Locked licenses, advisories, unused code, and workflow security | CI supply-chain jobs |
 | Performance | Parity-gated committed harness and retained samples | [Benchmark commands](https://github.com/seanabreau/vfy/blob/main/benchmarks/README.md) |
 
@@ -79,35 +79,38 @@ Before handoff, run the [full pre-PR checklist](https://github.com/seanabreau/vf
 
 ## CI change classification
 
-`scripts/ci_change_plan.py` classifies each change conservatively:
+`scripts/ci_change_plan.py` selects jobs from the pull request diff. Every pull
+request runs repository checks, dependency hygiene, and workflow analysis.
 
-- Documentation-only changes skip the platform jobs.
-- Ordinary code and test changes keep the Linux wheel lane.
-- Collector, PyO3, dependency, build, workflow, and unknown changes run the full
-  platform matrix.
-- Updates to `main` always run the full matrix.
+| Changed paths | Additional required checks |
+| --- | --- |
+| Documentation only | Strict site build, executable examples, and standalone tutorial installs |
+| Code, tests, or workflow files | Build one Linux wheel and run the complete Python suite on CPython 3.12 |
+| Rust crates, build metadata, lockfiles, or Rust test scripts | Linux wheel and Linux Rust lints, workspace tests, and snapshot checks |
+| Missing or unrecognized paths | Linux wheel, Rust checks, and strict site build |
+| Release workflow, packaging checks, or adoption tooling | Release verification with the platform matrix and pinned adoption suites |
+| Native corpus workflow, corpus tooling, or corpus policy | Linux CPython 3.12 wheel, focused differentials, pinned corpus inventory, and execution accounting checks |
 
-`tests/repository/test_workflows.py` checks that every workflow job that does
-not call a reusable workflow declares `timeout-minutes`.
+Release verification covers the wheel and Rust checks for its pull request.
+Mixed changes that affect the site or tutorial inputs also run the strict site
+build and standalone tutorial installs. The installed-wheel suite runs the
+executable examples in mixed changes.
 
 The `CI summary` gate requires the change classification and every selected job
-to succeed. Missing, cancelled, or skipped required jobs fail it.
+to succeed. Missing, cancelled, or skipped required jobs fail it. GitHub
+requires the check for the pull request against the current base.
+[Branch rules](https://github.com/seanabreau/vfy/rules)
 
-Every non-documentation tier also requires the Linux CPython 3.12
-[native adoption subset](native-pytest-testing.md#required-adoption-subset). It
-reuses the Linux wheel that the job built. Documentation-only changes skip that
-job explicitly, and the summary requires that skipped status.
+Pushes to `main` that affect the site trigger documentation deployment. The
+full native pytest corpus runs weekly and on manual dispatch. Run the Benchmarks
+workflow manually to compare the selected revision with its first parent.
+`tests/repository/test_workflows.py` checks job timeouts.
 
-The same required job is configured to compare the pinned iniconfig,
-itsdangerous, and h11 suites on CPython 3.13 through stock pytest and
-`vfy test --engine=native`. The independent route uses the same wheel in a
-second environment without pytest. The real-package corpus gate checks ordered
-JUnit identities and outcomes, exit status, and outcome counts; it rejects
-missing, stale, empty, or incompatible evidence. It retains commands, dependency
-versions, artifact hashes, reports, and transcripts under
-`target/native-adoption/independent/`. This check does not compare full report
-phases, diagnostics, warnings, or coverage. A configured gate does not establish
-that a particular wheel passed it.
+For compatibility changes, retain the pinned differential proof required by
+`AGENTS.md`. The [native adoption subset](native-pytest-testing.md#required-adoption-subset)
+provides a local real-project comparison for runner changes.
+
+See [Release validation](#release-validation) for the checks on candidates and tags.
 
 ## Measuring CI resource use
 
@@ -204,7 +207,9 @@ The Python suite keeps fixtures focused and tests each boundary separately:
 
 Release publication requires the complete Python suite against installed ABI3
 wheels on Linux CPython 3.12–3.15, and on macOS ARM64 CPython
-3.12, 3.14, and 3.15. The same commit must pass the Rust workspace tests on Linux.
+3.12, 3.14, and 3.15. The same commit must pass the Rust workspace tests on Linux
+and macOS. Manually dispatch the Release workflow to verify a candidate before
+tagging it. Tags that pass verification publish the release.
 
 Separate Linux CPython 3.12 wheel jobs are configured to run pytest 9.1.0, 9.1.1, and 9.2.0. Each version runs the native
 version-boundary suite without xdist, then installs pytest-xdist 3.8.0 for the
@@ -212,6 +217,15 @@ broader native suite's stock-pytest comparisons.
 The Linux CPython 3.12 full-suite job also runs pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
 direct-pytest coverage integration. The built-in asyncio check runs without
 pytest-asyncio installed.
+
+The release also checks the five-project
+[native adoption subset](native-pytest-testing.md#required-adoption-subset) on
+Linux CPython 3.12 with the exact release wheel and its build manifest.
+On CPython 3.13 it compares the pinned iniconfig, itsdangerous, and h11 suites
+through stock pytest and `vfy test --engine=native` in an environment without
+pytest. The comparison checks ordered JUnit identities and outcomes, exit
+statuses, and outcome counts. The `release-adoption` artifact retains commands,
+dependency versions, artifact hashes, reports, and transcripts.
 
 ### Native engine release criteria
 
@@ -301,7 +315,7 @@ uv run pytest -q tests/integration/test_documentation.py tests/integration/test_
 ```
 
 Mark an executable block with `<!-- doc-test: name -->` immediately before its
-fence. Names are unique within each page. Console blocks have one `$ ` command
+fence. Names are unique within each page. Console blocks have one shell command
 per line. Tests substitute the installed interpreter for `uv run vfy` and
 `uv run pytest`, so wheel tests exercise the wheel under review. Python blocks
 are run or written as shown. CI recipes use inline `run:` commands. The

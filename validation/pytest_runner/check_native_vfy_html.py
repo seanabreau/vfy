@@ -1,4 +1,4 @@
-"""Compare installed vfy pytest-route and native HTML result reports."""
+"""Compare independent and stock-pytest HTML reports and check pytest-native rejection."""
 
 from __future__ import annotations
 
@@ -155,7 +155,9 @@ def observe_report(path: Path) -> dict[str, object]:
     }
 
 
-def run(project: VfyProject, python: Path, engine: str, report: str) -> tuple[int, str]:
+def run(
+    project: VfyProject, python: Path, engine: str, report: str, *, workers: int = 1
+) -> tuple[int, str]:
     if not (project.root / "pytest.ini").exists():
         project.write("pytest.ini", "[pytest]\n")
     completed = project.run(
@@ -165,7 +167,7 @@ def run(project: VfyProject, python: Path, engine: str, report: str) -> tuple[in
         "test",
         "--all",
         "-j",
-        "1",
+        str(workers),
         f"--engine={engine}",
         "--no-cov",
         "--rootdir",
@@ -188,6 +190,7 @@ def assert_rejected(
     ini: str = "",
     test: str,
     diagnostic: str,
+    workers: int = 1,
 ) -> None:
     project = VfyProject(root)
     if conftest:
@@ -196,14 +199,14 @@ def assert_rejected(
         project.write("pytest.ini", ini)
     project.write("test_rejected.py", test)
     project.write("preserved.html", "preserved report\n")
-    status, terminal = run(project, python, "native", "preserved.html")
+    status, terminal = run(project, python, "pytest-native", "preserved.html", workers=workers)
     if (
         status != 4
         or diagnostic not in terminal
         or (project.root / "executed").exists()
         or (project.root / "preserved.html").read_text(encoding="utf-8") != "preserved report\n"
     ):
-        raise RuntimeError(f"native did not reject {root.name}\n{terminal}")
+        raise RuntimeError(f"pytest-native did not reject {root.name}\n{terminal}")
 
 
 def main() -> None:
@@ -267,16 +270,20 @@ def main() -> None:
         test=NOT_RUN_TEST,
         diagnostic="unsupported vfy HTML adapter",
     )
-    assert_rejected(
-        output / "attachments",
-        args.candidate_python,
-        test=(
-            "from pathlib import Path\n"
-            "def test_not_run(extras):\n"
-            "    Path('executed').write_text('yes', encoding='utf-8')\n"
-        ),
-        diagnostic="does not support the extras attachment fixture",
+    project = VfyProject(output / "attachments")
+    project.write(
+        "test_attachment.py",
+        "from vfy.pytest_html import extras as html_extras\n\n"
+        "def test_attachment(extras):\n"
+        "    extras.append(html_extras.text('attachment contents', name='attachment sentinel'))\n",
     )
+    status, terminal = run(project, args.candidate_python, "pytest-native", "attachments.html")
+    if status != 0:
+        raise RuntimeError(f"pytest-native attachment test returned {status}\n{terminal}")
+    attachment_report = (project.root / "attachments.html").read_text(encoding="utf-8")
+    expected_attachment = ("attachment sentinel", "attachment contents")
+    if any(detail not in attachment_report for detail in expected_attachment):
+        raise RuntimeError("pytest-native omitted the captured attachment")
     assert_rejected(
         output / "row-hook",
         args.candidate_python,
@@ -285,13 +292,15 @@ def main() -> None:
         diagnostic="pytest_html_results_table_row",
     )
     assert_rejected(
-        output / "streaming",
+        output / "parallel-streaming",
         args.candidate_python,
         ini="[pytest]\ngenerate_report_on_test = true\n",
         test=NOT_RUN_TEST,
-        diagnostic="does not support generate_report_on_test",
+        diagnostic="generate_report_on_test requires --workers=1",
+        workers=2,
     )
-    observations["rejections"] = ["impostor", "attachments", "row-hook", "streaming"]
+    observations["attachments"] = True
+    observations["rejections"] = ["impostor", "row-hook", "parallel-streaming"]
     record = output / "native-vfy-html.json"
     record.write_text(json.dumps(observations, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     sys.stdout.write(f"{record}\n")
