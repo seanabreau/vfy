@@ -8,13 +8,14 @@ import signal
 import sys
 
 from ._cli_arguments import escape_arguments
-from ._closed_stdout import discard_stdout
+from ._closed_stdout import discard_stdout, flush_stdout_before_exit
 from .native import is_test_cli
 
 
 def main() -> int:
     try:
-        return _main()
+        with flush_stdout_before_exit():
+            return _main()
     except BrokenPipeError:
         # pytest and Coverage.py both end with status 1 when stdout closes early.
         discard_stdout()

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypedDict, cast, override
 
 from vfy import native
-from vfy._closed_stdout import CLOSED_STDOUT_STATUS, discard_stdout
+from vfy._closed_stdout import CLOSED_STDOUT_STATUS, discard_stdout, flush_stdout_before_exit
 
 
 class _StreamOptions(TypedDict):
@@ -276,7 +276,7 @@ def main(
             sys.path.insert(0, os.getcwd())
 
     try:
-        with ExitStack() as resources:
+        with flush_stdout_before_exit(), ExitStack() as resources:
             resources.callback(owner.close)
             resources.enter_context(_multiprocessing_startup(startup))
             resources.enter_context(_traceback_startup(startup))

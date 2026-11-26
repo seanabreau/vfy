@@ -10,10 +10,30 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 # A test process exits with the shell's status for a SIGPIPE ending (128 + 13)
 # so the controller can tell a closed pipe apart from a failed test run.
 CLOSED_STDOUT_STATUS = 141
+
+
+def _flush_stdout() -> None:
+    stream = sys.stdout
+    if stream is not None and not getattr(stream, "closed", False):
+        stream.flush()
+
+
+@contextmanager
+def flush_stdout_before_exit() -> Iterator[None]:
+    """Flush buffered output while the command can still handle a closed pipe."""
+    try:
+        yield
+    except SystemExit:
+        _flush_stdout()
+        raise
+    else:
+        _flush_stdout()
 
 
 def discard_stdout() -> None:

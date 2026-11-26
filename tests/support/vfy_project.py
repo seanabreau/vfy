@@ -404,28 +404,56 @@ class VfyProject:
         The result holds the lines read and the complete stderr.
         """
 
-        with subprocess.Popen(
-            list(command),
-            cwd=self.root,
-            env=self._environment(env),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0,
-            start_new_session=os.name == "posix",
-        ) as process:
-            assert process.stdout is not None
-            try:
-                # Read unbuffered so the pipe keeps everything after the last line read.
-                read = bytearray()
-                while read.count(b"\n") < lines and (byte := process.stdout.read(1)):
-                    read += byte
-                process.stdout.close()
-                (self.root / marker).touch()
-                _stdout, stderr = process.communicate(timeout=self.timeout)
-            except BaseException:
-                kill_process_tree(process)
-                raise
-        return CommandResult(process.returncode, read.decode(), stderr.decode(), tuple(command))
+        read_fd, write_fd = os.pipe()
+        prefix = b""
+        read_error: OSError | None = None
+        with (
+            os.fdopen(read_fd, "rb", buffering=0) as reader,
+            os.fdopen(write_fd, "wb", buffering=0) as writer,
+        ):
+
+            def read_prefix() -> None:
+                nonlocal prefix, read_error
+                try:
+                    with reader:
+                        prefix = b"".join(reader.readline() for _ in range(lines))
+                    (self.root / marker).touch()
+                except OSError as error:
+                    read_error = error
+
+            if not lines:
+                # The child starts with no reader, even if it writes immediately.
+                read_prefix()
+            with subprocess.Popen(
+                list(command),
+                cwd=self.root,
+                env=self._environment(env),
+                stdout=writer,
+                stderr=subprocess.PIPE,
+                start_new_session=os.name == "posix",
+            ) as process:
+                writer.close()
+                deadline = time.monotonic() + self.timeout
+                reader_thread = threading.Thread(target=read_prefix, daemon=True)
+                if lines:
+                    reader_thread.start()
+                try:
+                    # Drain stderr while the reader waits for stdout.
+                    _, stderr = process.communicate(timeout=self.timeout)
+                    if lines:
+                        reader_thread.join(timeout=max(0.0, deadline - time.monotonic()))
+                        if reader_thread.is_alive():
+                            raise TimeoutError("timed out waiting for the stdout prefix")
+                    if read_error is not None:
+                        raise read_error
+                except BaseException:
+                    with suppress(OSError):
+                        terminate_process_tree(process)
+                    with suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=2)
+                    kill_process_tree(process)
+                    raise
+        return CommandResult(process.returncode, prefix.decode(), stderr.decode(), tuple(command))
 
     def run_pytest(
         self,

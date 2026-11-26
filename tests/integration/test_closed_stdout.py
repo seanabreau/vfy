@@ -70,7 +70,9 @@ def test_test_command_ends_like_pytest_when_stdout_closes(
         else:
             # --quiet keeps vfy's own stderr notices out of the comparison.
             command = ["-m", "vfy", "--quiet", "test", f"--engine={engine}"]
-        results[route] = project.run_closing_stdout(project.interpreter, *command, *arguments)
+        results[route] = project.run_closing_stdout(
+            project.interpreter, *command, *arguments, env={"PYTHONUNBUFFERED": None}
+        )
 
     reference, actual = results["pytest"], results["vfy"]
     assert (reference.returncode, reference.stderr) == (1, "")
@@ -85,12 +87,36 @@ def test_coverage_report_ends_like_coverage_py_when_stdout_closes(tmp_path: Path
     data.write()
 
     # vfy writes the report at once, so close the pipe before anything is written.
-    reference = project.run_closing_stdout(project.interpreter, "-m", "coverage", "report", lines=0)
+    # Coverage.py needs unbuffered output to observe the failure during its command.
+    reference = project.run_closing_stdout(
+        project.interpreter, "-u", "-m", "coverage", "report", lines=0
+    )
     actual = project.run_closing_stdout(
-        project.interpreter, "-m", "vfy", "coverage", "report", lines=0
+        project.interpreter,
+        "-m",
+        "vfy",
+        "coverage",
+        "report",
+        lines=0,
+        env={"PYTHONUNBUFFERED": None},
     )
 
     # Coverage.py prints the BrokenPipeError traceback; vfy ends quietly.
     assert reference.returncode == 1
     assert "BrokenPipeError" in reference.stderr
     assert (actual.returncode, actual.stdout, actual.stderr) == (1, "", "")
+
+
+@pytest.mark.parametrize("arguments", [("--help",), ("test", "--engine=native", "--version")])
+def test_buffered_stdout_is_flushed_before_exit(tmp_path: Path, arguments: tuple[str, ...]) -> None:
+    project = VfyProject(tmp_path)
+    result = project.run_closing_stdout(
+        project.interpreter,
+        "-m",
+        "vfy",
+        "--quiet",
+        *arguments,
+        lines=0,
+        env={"PYTHONUNBUFFERED": None},
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (1, "", "")
