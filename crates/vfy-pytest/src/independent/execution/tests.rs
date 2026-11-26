@@ -1,8 +1,8 @@
 use super::fixture_cache::FixtureCacheStorage;
 use super::state::{ExecutionState, FixtureInstance, FixtureSlot};
-use crate::independent::fixture_binding::NativeFixtureBinding;
+use crate::independent::fixture_binding::{FixtureDefinitionAttributes, NativeFixtureBinding};
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PyTuple};
 use std::cell::Cell;
 use std::rc::Rc;
 use vfy_core::{
@@ -17,6 +17,12 @@ fn instance(py: Python<'_>, key: FixtureCacheKey) -> PyResult<FixtureInstance> {
         "resource".to_owned(),
         FixtureScope::Module,
         py.import("builtins")?.getattr("object")?.unbind(),
+        FixtureDefinitionAttributes {
+            argnames: PyTuple::empty(py).unbind(),
+            baseid: String::new(),
+            params: py.None(),
+            ids: py.None(),
+        },
     )?;
     Ok(FixtureInstance {
         order: 0,

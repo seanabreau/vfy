@@ -519,6 +519,15 @@ rolled back.
 | `2` | Argument parsing error, failed coverage or survivor gate, or Ctrl-C in watch mode |
 | `4` | Test configuration or usage error, including a rejected explicit fork request (see [native worker start](configuration.md#native-worker-start)) |
 
-`vfy test` uses pytest-compatible exit statuses. Status `4` indicates a test
-configuration or usage error from the selected engine. `vfy coverage run`
-returns the target program's exit status.
+`vfy test` uses pytest's exit statuses:
+
+| Status | Meaning for `vfy test` |
+| --- | --- |
+| `0` | Every collected test passed, skipped, or failed as expected |
+| `1` | A test failed, or coverage is below `--cov-fail-under`; also a vfy error before tests run, such as `--engine=pytest-native` without installed pytest |
+| `2` | The run was interrupted, including by a collection error or Ctrl-C |
+| `3` | Internal error, such as an exception from a `conftest.py` or plug-in hook outside a test |
+| `4` | Test configuration or usage error from the selected engine, such as an unknown option, a missing test path, or a rejected explicit fork request |
+| `5` | No tests were collected, including when every test is deselected |
+
+`vfy coverage run` returns the target program's exit status.

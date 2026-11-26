@@ -1347,6 +1347,14 @@ class NativeIndependentSession:
 
 class NativeFixtureBinding:
     argname: str
+    @property
+    def argnames(self) -> tuple[str, ...]: ...
+    @property
+    def baseid(self) -> str: ...
+    @property
+    def params(self) -> tuple[object, ...] | None: ...
+    @property
+    def ids(self) -> object: ...
     scope: str
     func: object
     cached_result: object

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
+use super::git::{IndexEntry, parse_index};
 use super::graph::PortableGraph;
 use super::plan::node_file;
 use super::{SelectionMode, SelectionPlan, read_git_replay_state, sort_tests, test_context};
@@ -32,6 +33,12 @@ fn invalid(message: impl std::fmt::Display) -> CoreError {
     CoreError::InvalidInput(format!("CI selection: {message}"))
 }
 
+/// Name the path of a failed filesystem operation.
+fn io_failure(operation: &str, path: &Path) -> impl FnOnce(std::io::Error) -> CoreError {
+    let context = format!("failed to {operation} {}", path.display());
+    move |error| invalid(format!("{context}: {error}"))
+}
+
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, CoreError> {
     read_json_bounded(path, MAX_ARTIFACT_BYTES)
 }
@@ -40,11 +47,11 @@ fn read_json_bounded<T: serde::de::DeserializeOwned>(
     path: &Path,
     max_bytes: u64,
 ) -> Result<T, CoreError> {
-    let metadata = std::fs::metadata(path).map_err(invalid)?;
+    let metadata = std::fs::metadata(path).map_err(io_failure("read", path))?;
     if metadata.len() > max_bytes {
         return Err(invalid("artifact exceeds 128 MiB"));
     }
-    serde_json::from_slice(&std::fs::read(path).map_err(invalid)?).map_err(invalid)
+    serde_json::from_slice(&std::fs::read(path).map_err(io_failure("read", path))?).map_err(invalid)
 }
 
 fn read_history(path: &Path, max_bytes: u64) -> Result<serde_json::Value, CoreError> {
@@ -72,7 +79,7 @@ fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, CoreError> {
         .current_dir(root)
         .args(args)
         .output()
-        .map_err(invalid)?;
+        .map_err(|error| invalid(format!("failed to run git: {error}")))?;
     if !output.status.success() {
         return Err(invalid(String::from_utf8_lossy(&output.stderr)));
     }
@@ -120,20 +127,59 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> Result<String, CoreErro
     Ok(result)
 }
 
-fn tracked_files(root: &Path) -> Result<BTreeSet<String>, CoreError> {
-    let bytes = git(root, &["ls-files", "-z"])?;
-    let files: BTreeSet<String> = bytes
-        .split(|byte| *byte == 0)
-        .filter(|part| !part.is_empty())
-        .map(|part| String::from_utf8(part.to_vec()).map_err(invalid))
-        .collect::<Result<_, _>>()?;
+/// Whether a tracked path can change what the tests run.
+///
+/// The interpreter imports bytecode from `__pycache__` only for an existing source file
+/// and rewrites it when it no longer matches that source (PEP 3147), as vfy's
+/// assertion rewriting does for test modules. Tracked bytecode there is a
+/// cache of other inputs, and importing tests can rewrite it during a run.
+fn source_input(path: &str) -> bool {
+    !(Path::new(path)
+        .extension()
+        .is_some_and(|extension| extension == "pyc")
+        && path.split('/').any(|part| part == "__pycache__"))
+}
+
+fn tracked_files(root: &Path) -> Result<BTreeMap<String, IndexEntry>, CoreError> {
+    let files = parse_index(&git(root, &["ls-files", "--stage", "-z"])?).map_err(invalid)?;
     if files.len() > MAX_RECORDS {
         return Err(invalid("too many tracked files"));
     }
-    for path in &files {
+    for path in files.keys() {
         checked_relative(path)?;
     }
     Ok(files)
+}
+
+fn source_inputs(root: &Path) -> Result<BTreeMap<String, IndexEntry>, CoreError> {
+    let mut files = tracked_files(root)?;
+    files.retain(|path, entry| matches!(entry, IndexEntry::Submodule { .. }) || source_input(path));
+    Ok(files)
+}
+
+/// Identify a tracked file by its bytes, or a submodule by its recorded commit.
+fn tracked_digest(root: &Path, path: &str, entry: &IndexEntry) -> Result<String, CoreError> {
+    match entry {
+        IndexEntry::Blob => {
+            let path = root.join(path);
+            file_digest(&path).map_err(io_failure("read tracked input", &path))
+        }
+        IndexEntry::Submodule { commit } => Ok(bytes_digest(
+            format!("submodule commit {commit}").as_bytes(),
+        )),
+    }
+}
+
+fn tracked_symlink(root: &Path, path: &str, entry: &IndexEntry) -> Result<bool, CoreError> {
+    if matches!(entry, IndexEntry::Submodule { .. }) {
+        return Ok(false);
+    }
+    let path = root.join(path);
+    Ok(path
+        .symlink_metadata()
+        .map_err(io_failure("inspect tracked input", &path))?
+        .file_type()
+        .is_symlink())
 }
 
 pub(super) fn collection_inventory(nodeids: &[String]) -> Result<BTreeSet<String>, CoreError> {
@@ -193,27 +239,43 @@ pub struct BaselineExport<'a> {
     pub ignored: &'a [String],
 }
 
-fn export_digests(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
-    let tracked = tracked_files(root)?;
+fn export_digests(
+    root: &Path,
+    tracked: &BTreeMap<String, IndexEntry>,
+) -> Result<BTreeMap<String, String>, CoreError> {
     let mut source_digests = BTreeMap::new();
-    for path in &tracked {
-        if root
-            .join(path)
-            .symlink_metadata()
-            .map_err(invalid)?
-            .file_type()
-            .is_symlink()
-        {
+    for (path, entry) in tracked {
+        if tracked_symlink(root, path, entry)? {
             return Err(invalid(
                 "symlinked tracked inputs are unsupported for CI baselines",
             ));
         }
-        source_digests.insert(
-            path.clone(),
-            file_digest(&root.join(path)).map_err(invalid)?,
-        );
+        source_digests.insert(path.clone(), tracked_digest(root, path, entry)?);
     }
     Ok(source_digests)
+}
+
+fn validate_export_source(
+    root: &Path,
+    index: &BTreeMap<String, IndexEntry>,
+    digests: &BTreeMap<String, String>,
+    head: &str,
+    ignored: &[String],
+) -> Result<(), CoreError> {
+    let current = source_inputs(root)?;
+    if &current != index {
+        return Err(invalid("source changed during baseline export"));
+    }
+    for (path, entry) in &current {
+        if tracked_digest(root, path, entry)? != digests[path] {
+            return Err(invalid("source changed during baseline export"));
+        }
+    }
+    let current = read_git_replay_state(ignored).map_err(invalid)?;
+    if current.head != head || !current.changed.is_empty() || current.submodule_change.is_some() {
+        return Err(invalid("checkout changed during baseline export"));
+    }
+    Ok(())
 }
 
 /// Export a passing full run from a clean checkout into one baseline artifact.
@@ -223,10 +285,16 @@ fn export_digests(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
 pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
     let root = repository_root()?;
     let state = read_git_replay_state(request.ignored).map_err(invalid)?;
+    if let Some(reason) = state.submodule_change {
+        return Err(invalid(format!(
+            "baseline export requires a clean checkout: {reason}"
+        )));
+    }
     if !state.changed.is_empty() {
         return Err(invalid("baseline export requires a clean checkout"));
     }
-    let source_digests = export_digests(&root)?;
+    let index = source_inputs(&root)?;
+    let source_digests = export_digests(&root, &index)?;
     let tracked: BTreeSet<_> = source_digests.keys().cloned().collect();
     let collected: Vec<String> = read_json(request.collection_path)?;
     let inventory = checked_collection(&collected)?;
@@ -303,16 +371,13 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
         coverage_digest,
     };
     bundle.import_graph.validate(&tracked)?;
-    // Source may change while the bundle is assembled.
-    for (path, digest) in &bundle.source_digests {
-        if file_digest(&root.join(path)).map_err(invalid)? != *digest {
-            return Err(invalid("source changed during baseline export"));
-        }
-    }
-    let current = read_git_replay_state(request.ignored).map_err(invalid)?;
-    if current.head != state.head || !current.changed.is_empty() {
-        return Err(invalid("checkout changed during baseline export"));
-    }
+    validate_export_source(
+        &root,
+        &index,
+        &bundle.source_digests,
+        &state.head,
+        request.ignored,
+    )?;
     write_json(request.destination, &bundle)
 }
 
@@ -431,12 +496,18 @@ fn validate_bundle(bundle: &BaselineBundle) -> Result<CoverageData, CoreError> {
     Ok(data)
 }
 
+/// Edited inputs with the index they were compared from.
+struct EligibleChanges {
+    changed: BTreeSet<String>,
+    tracked: BTreeMap<String, IndexEntry>,
+}
+
 fn eligible_changes(
     root: &Path,
     bundle: &BaselineBundle,
     fingerprint: &str,
     state: &super::GitReplayState,
-) -> Result<Result<BTreeSet<String>, String>, CoreError> {
+) -> Result<Result<EligibleChanges, String>, CoreError> {
     if bundle.fingerprint != fingerprint {
         return Ok(Err(
             "the Python, configuration, environment, or pytest invocation changed".to_owned(),
@@ -452,14 +523,14 @@ fn eligible_changes(
             "baseline commit is unavailable or is not an ancestor of HEAD".to_owned(),
         ));
     }
-    let tracked = tracked_files(root)?;
-    if tracked != bundle.source_digests.keys().cloned().collect()
-        || state.untracked
-        || state.deleted
-    {
+    let tracked = source_inputs(root)?;
+    if !tracked.keys().eq(bundle.source_digests.keys()) || state.untracked || state.deleted {
         return Ok(Err(
             "added, deleted, renamed, or untracked inputs require a full run".to_owned(),
         ));
+    }
+    if let Some(reason) = &state.submodule_change {
+        return Ok(Err(reason.clone()));
     }
     let statuses = git(
         root,
@@ -481,17 +552,16 @@ fn eligible_changes(
         ));
     }
     let mut changed = BTreeSet::new();
-    for (path, digest) in &bundle.source_digests {
-        let absolute = root.join(path);
-        if absolute
-            .symlink_metadata()
-            .map_err(invalid)?
-            .file_type()
-            .is_symlink()
-        {
+    for (path, entry) in &tracked {
+        if tracked_symlink(root, path, entry)? {
             return Ok(Err("symlinked inputs require a full run".to_owned()));
         }
-        if file_digest(&absolute).map_err(invalid)? != *digest {
+        if tracked_digest(root, path, entry)? != bundle.source_digests[path] {
+            if matches!(entry, IndexEntry::Submodule { .. }) {
+                return Ok(Err(format!(
+                    "Git submodule {path} records a different commit"
+                )));
+            }
             changed.insert(path.clone());
         }
     }
@@ -505,7 +575,7 @@ fn eligible_changes(
             "configuration or unsupported runtime inputs changed".to_owned()
         ));
     }
-    Ok(Ok(changed))
+    Ok(Ok(EligibleChanges { changed, tracked }))
 }
 
 fn affected_paths(
@@ -625,14 +695,15 @@ pub fn import_baseline(
         return Ok(result);
     };
 
-    let changed = match eligible_changes(&root, &bundle, fingerprint, &state)? {
-        Ok(changed) => changed,
-        Err(reason) => {
-            result.plan.selection.reasons = vec![reason];
-            return Ok(result);
-        }
-    };
-    result.plan.source_identity = source_identity(&root, &bundle.source_digests)?;
+    let EligibleChanges { changed, tracked } =
+        match eligible_changes(&root, &bundle, fingerprint, &state)? {
+            Ok(eligible) => eligible,
+            Err(reason) => {
+                result.plan.selection.reasons = vec![reason];
+                return Ok(result);
+            }
+        };
+    result.plan.source_identity = source_identity(&root, &tracked)?;
     let affected = match affected_paths(&root, &bundle, &changed)? {
         Ok(affected) => affected,
         Err(reasons) => {
@@ -695,11 +766,11 @@ pub fn import_baseline(
     Ok(result)
 }
 
-fn source_identity(root: &Path, files: &BTreeMap<String, String>) -> Result<String, CoreError> {
+fn source_identity(root: &Path, files: &BTreeMap<String, IndexEntry>) -> Result<String, CoreError> {
     let mut values = Vec::new();
-    for path in files.keys() {
+    for (path, entry) in files {
         values.push(path.clone());
-        values.push(file_digest(&root.join(path)).map_err(invalid)?);
+        values.push(tracked_digest(root, path, entry)?);
     }
     Ok(replay_fingerprint(values))
 }
@@ -725,11 +796,7 @@ pub fn write_plan_request(request: PlanRequest<'_>) -> Result<(), CoreError> {
     {
         request.source_identity
     } else if let Ok(root) = repository_root() {
-        let files = tracked_files(&root)?
-            .into_iter()
-            .map(|path| (path, String::new()))
-            .collect();
-        source_identity(&root, &files)?
+        source_identity(&root, &source_inputs(&root)?)?
     } else {
         request.source_identity
     };
@@ -919,10 +986,7 @@ pub fn plan_source_current(path: &Path, ignored: &[String]) -> Result<bool, Core
         return Ok(true);
     }
     let root = repository_root()?;
-    let files = tracked_files(&root)?
-        .into_iter()
-        .map(|path| (path, String::new()))
-        .collect();
+    let files = source_inputs(&root)?;
     let state = match read_git_replay_state(ignored) {
         Ok(state) => state,
         // A repository without commits has no HEAD. A plan prepared there has
@@ -934,7 +998,7 @@ pub fn plan_source_current(path: &Path, ignored: &[String]) -> Result<bool, Core
     };
     Ok(source_identity(&root, &files)? == plan.source_identity
         && state.head == plan.target_commit
-        && (plan.selection.fallback_full || !state.untracked))
+        && (plan.selection.fallback_full || (!state.untracked && state.submodule_change.is_none())))
 }
 
 /// Persist an explicit full-suite decision.
@@ -1113,7 +1177,7 @@ pub fn validate_artifact_paths(
             let absolute = absolute_path(Path::new(path));
             if absolute
                 .strip_prefix(&root)
-                .is_ok_and(|relative| tracked.contains(&glob_path(relative)))
+                .is_ok_and(|relative| tracked.contains_key(&glob_path(relative)))
             {
                 return Err(invalid("CI outputs cannot replace tracked source files"));
             }

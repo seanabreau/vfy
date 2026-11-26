@@ -78,6 +78,77 @@ class CaseItem(pytest.Item):
     assert "_ usecase: second _" in result.stdout
 
 
+def test_item_repr_failure_filters_its_traceback_like_pytest(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write(
+        "conftest.py",
+        """import pytest
+
+hide_arguments = []
+
+
+def hide_when_called(excinfo):
+    hide_arguments.append(type(excinfo).__name__)
+    return True
+
+
+def hidden():
+    __tracebackhide__ = True
+    conditional()
+
+
+def conditional():
+    __tracebackhide__ = hide_when_called
+    visible()
+
+
+def visible():
+    raise ValueError("boom")
+
+
+def pytest_collect_file(parent, file_path):
+    if file_path.suffix == ".case":
+        return CaseFile.from_parent(parent, path=file_path)
+
+
+class CaseFile(pytest.File):
+    def collect(self):
+        yield CaseItem.from_parent(self, name="case")
+
+
+class CaseItem(pytest.Item):
+    def runtest(self):
+        hidden()
+
+    def repr_failure(self, excinfo):
+        def names(traceback):
+            return [entry.name for entry in traceback if entry.path.name == "conftest.py"]
+
+        lines = [
+            f"all: {names(excinfo.traceback)}",
+            f"excinfo: {names(excinfo.traceback.filter(excinfo))}",
+            f"hide_arguments: {hide_arguments}",
+            f"callable: {names(excinfo.traceback.filter(lambda entry: entry.name != 'visible'))}",
+        ]
+        try:
+            excinfo.traceback.filter()
+        except TypeError:
+            lines.append("no filter: TypeError")
+        return "\\n".join(lines)
+
+    def reportinfo(self):
+        return self.path, 0, f"case: {self.name}"
+""",
+    )
+    project.write("test_items.case", "")
+
+    result = _differential(project)
+
+    assert result.returncode == 1
+    assert "excinfo: ['runtest', 'visible']" in result.stdout
+    assert "hide_arguments: ['ExceptionInfo']" in result.stdout
+
+
 def test_doctest_modules_failure_matches_pytest(tmp_path: Path) -> None:
     project = VfyProject(tmp_path)
     project.write(

@@ -239,17 +239,14 @@ impl CollectorCore {
                 | events.getattr("BRANCH_LEFT")?.extract::<u32>()?
                 | events.getattr("BRANCH_RIGHT")?.extract::<u32>()?
         } else if local_legacy_frames {
-            let branch_event = if events.hasattr("BRANCH")? {
-                events.getattr("BRANCH")?.extract::<u32>()?
-            } else {
-                events.getattr("BRANCH_LEFT")?.extract::<u32>()?
-                    | events.getattr("BRANCH_RIGHT")?.extract::<u32>()?
-            };
+            // LINE events supply these arcs. Only a backward JUMP can repeat a
+            // line without a LINE event; CPython 3.12+ branch instructions
+            // only jump forward, so branch events would add callbacks and no
+            // evidence.
             line_event
                 | events.getattr("PY_RESUME")?.extract::<u32>()?
                 | events.getattr("PY_RETURN")?.extract::<u32>()?
                 | events.getattr("PY_YIELD")?.extract::<u32>()?
-                | branch_event
                 | events.getattr("JUMP")?.extract::<u32>()?
         } else {
             line_event

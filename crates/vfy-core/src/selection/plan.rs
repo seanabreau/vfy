@@ -158,6 +158,12 @@ impl SelectionPlan {
         self.full_seconds = seconds(&self.all_tests, &self.durations);
         self.selected_seconds = self.full_seconds;
     }
+
+    /// Run the complete suite, recording why a subset cannot be trusted.
+    pub fn fall_back_to_full(&mut self, reason: String) {
+        self.reasons.push(reason);
+        self.select_full();
+    }
 }
 
 fn normal_path(path: &str) -> String {

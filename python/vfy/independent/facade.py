@@ -286,11 +286,21 @@ class TracebackEntry:
     def statement(self) -> str:
         return linecache.getline(self.frame.f_code.co_filename, self.lineno + 1).strip()
 
-    def ishidden(self) -> bool:
-        value = self.frame.f_locals.get(
-            "__tracebackhide__", self.frame.f_globals.get("__tracebackhide__", False)
-        )
-        return bool(value(self) if callable(value) else value)
+    def ishidden(self, excinfo: ExceptionInfo | None) -> bool:
+        """Return whether the frame's ``__tracebackhide__`` hides it.
+
+        A callable ``__tracebackhide__`` receives ``excinfo`` and decides.
+        """
+        hide: object = False
+        for namespace in (self.frame.f_locals, self.frame.f_globals):
+            try:
+                hide = namespace["__tracebackhide__"]
+            except Exception:  # noqa: BLE001 - pytest treats any failed namespace lookup as absent
+                continue
+            break
+        if hide and callable(hide):
+            return cast("bool", hide(excinfo))
+        return cast("bool", hide)
 
     @override
     def __repr__(self) -> str:
@@ -324,8 +334,18 @@ class Traceback(list[TracebackEntry]):
                 return Traceback(self[index:])
         return self
 
-    def filter(self, predicate: Callable[[TracebackEntry], bool] | None = None) -> Traceback:
-        keep = predicate or (lambda entry: not entry.ishidden())
+    def filter(
+        self, excinfo_or_fn: ExceptionInfo | Callable[[TracebackEntry], bool], /
+    ) -> Traceback:
+        """Return the entries kept by a predicate, or those an ``ExceptionInfo`` does not hide."""
+        if isinstance(excinfo_or_fn, ExceptionInfo):
+            excinfo = excinfo_or_fn
+
+            def keep(entry: TracebackEntry) -> bool:
+                return not entry.ishidden(excinfo)
+
+        else:
+            keep = excinfo_or_fn
         return Traceback(entry for entry in self if keep(entry))
 
 

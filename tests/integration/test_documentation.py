@@ -312,13 +312,12 @@ def run_step(project: VfyProject, arguments: list[str], *, status: int = 0) -> N
 
 @requires_native_test_engine
 def test_ci_recipes_report_the_same_complete_dataset(project: VfyProject) -> None:
-    collect, export, gate = workflow_steps("ci-full")
-    run_step(project, collect)
-    run_step(project, gate, status=2)
+    (test,) = workflow_steps("ci-full")
+    run_step(project, test, status=1)
+    assert (project.root / "coverage.xml").is_file()
 
     project.write("tests/test_bounds.py", block(TUTORIAL, "complete-tests"))
-    for step in (collect, export, gate):
-        run_step(project, step)
+    run_step(project, test)
     full = evidence(project)
     collect_shard, combine, export, gate = workflow_steps("ci-shards")
     for test_file in ("tests/test_bounds.py", "tests/test_formatting.py"):
@@ -347,10 +346,25 @@ def test_ci_recipes_report_the_same_complete_dataset(project: VfyProject) -> Non
     assert float(xml.attrib["branch-rate"]) == 1
 
 
+@requires_native_test_engine
 def test_ci_recipe_preserves_reports_after_a_test_failure(project: VfyProject) -> None:
     source = block(TUTORIAL, "complete-tests").replace("clamp_low(-1) == 0", "clamp_low(-1) == 99")
     project.write("tests/test_bounds.py", source)
-    collect, export, gate = workflow_steps("ci-full")
+    (test,) = workflow_steps("ci-full")
+    run_step(project, test, status=1)
+    assert project.data().has_arcs()
+    xml = ET.parse(project.root / "coverage.xml").getroot()
+    assert float(xml.attrib["line-rate"]) == 1
+    assert float(xml.attrib["branch-rate"]) == 1
+
+
+def test_ci_pytest_recipe_gates_and_preserves_reports(project: VfyProject) -> None:
+    collect, export, gate = workflow_steps("ci-pytest")
+    run_step(project, collect)
+    run_step(project, gate, status=2)
+
+    source = block(TUTORIAL, "complete-tests").replace("clamp_low(-1) == 0", "clamp_low(-1) == 99")
+    project.write("tests/test_bounds.py", source)
     run_step(project, collect, status=1)
     for step in (export, gate):
         run_step(project, step)

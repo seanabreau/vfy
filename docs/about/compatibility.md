@@ -125,8 +125,9 @@ Native behavior and limits:
   uses the first non-empty answer before its own rules.
 - `Config.inicfg` is a read-only mapping of the configuration file's values and
   raises pytest's deprecation warning; assigning to it is not supported. The
-  legacy `tmpdir` path object implements the commonly used `py.path.local`
-  methods, not the full class.
+  legacy path objects returned by `tmpdir`, `Config.rootdir`, and
+  `Config.inifile` implement the commonly used `py.path.local` methods, not the
+  full class.
 
 Native execution uses its own executor. Contexts for pytest and pluggy internals
 can therefore differ. When evaluating a suite, compare outcomes and coverage of

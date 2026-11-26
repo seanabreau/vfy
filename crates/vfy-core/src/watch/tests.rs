@@ -377,6 +377,9 @@ fn current_publication_preserves_unrelated_report_files() {
         None,
     )
     .expect("watch");
+    // Exercise input hashing and publication without asynchronous backend events.
+    let (_events, receiver) = mpsc::channel();
+    session.receiver = receiver;
     session.begin_run().expect("begin run");
     assert!(
         session
@@ -468,6 +471,9 @@ fn finalization_consumes_the_execution_before_another_save() {
     std::fs::write(&source, "original").expect("source");
     std::fs::write(stage.path().join("data"), "accepted evidence").expect("data");
     let mut session = session(root.path());
+    // Verify the commit point with filesystem contents as the only input changes.
+    let (_events, receiver) = mpsc::channel();
+    session.receiver = receiver;
     session.begin_run().expect("begin");
     assert_eq!(
         session

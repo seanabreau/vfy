@@ -24,12 +24,12 @@ uv run vfy diagnostics --collect -- tests
 ```
 
 Diagnostics reports visible configuration, plug-in, and hook conflicts with
-locations and suggested fixes. It lists which installed plug-ins vfy
-loads and which it omits. The static scan can include nested `conftest.py`
-files outside the chosen test path; `--collect` checks that path by importing
-modules and running collection hooks. It does not run test bodies or validate
-fixture behavior and outcomes. A clean diagnostic result is not a compatibility
-guarantee. Pass run options after `--`.
+locations and suggested fixes. With `--engine=pytest-native`, it also lists
+which installed plug-ins vfy loads and which it omits; the default engine's
+report lists no plug-ins, so check them with a test run. The static scan can
+include nested `conftest.py` files outside the chosen test path. Add `--collect`
+to import modules and run collection hooks for the chosen path. Run the suite
+to check test bodies and fixture behavior. Pass run options after `--`.
 
 ## Compare one suite before you change CI
 
@@ -89,16 +89,26 @@ require a suite whose execution plug-ins vfy supports.
 
 ## Load supported plug-ins
 
-Native vfy provides coverage, asyncio, and test-results HTML support. It
-disables general installed plug-in autoloading and loads its supported
-adapters. It also loads an installed plug-in when a static scan of its module
-finds only fixtures and hooks that native execution runs unchanged, such as
-pytest-datadir. The scan follows hook reexports within the same package.
-Unresolved imports, import cycles, and hook decorators or names that cannot
-be resolved statically leave a plug-in omitted. Explicitly loading an unsupported runtime
-plug-in is rejected. vfy does not fall back to pytest. An explicit `-p pytest_cov`,
-including one in configured `addopts`, is replaced by vfy's coverage adapter, and
-pytest's built-in plug-in names such as `-p warnings` are accepted. See
+Native vfy provides coverage, asyncio, and test-results HTML support. The
+default engine loads plug-ins as pytest does: it autoloads every installed
+`pytest11` entry point unless `PYTEST_DISABLE_PLUGIN_AUTOLOAD` is set or
+`-p no:NAME` blocks it, and loads `-p`, `PYTEST_PLUGINS`, and `pytest_plugins`
+requests. vfy's adapters stand in for pytest-cov and pytest-asyncio. A loaded
+plug-in that implements a hook the engine does not run stops the session with a
+usage error that names the hook and the plug-in; block it with `-p no:NAME` or
+keep pytest as the runner, as shown above.
+
+With `--engine=pytest-native`, vfy disables general plug-in autoloading and
+loads its supported adapters. It also loads an installed plug-in when a static
+scan of its module finds only fixtures and hooks that native execution runs
+unchanged, such as pytest-datadir. The scan follows hook reexports within the
+same package. Unresolved imports, import cycles, and hook decorators or names
+that cannot be resolved statically leave a plug-in omitted. Explicitly loading
+an unsupported runtime plug-in is rejected.
+
+Neither engine falls back to pytest. An explicit `-p pytest_cov`, including one
+in configured `addopts`, is replaced by vfy's coverage adapter, and pytest's
+built-in plug-in names such as `-p warnings` are accepted. See
 [Compatibility](../about/compatibility.md#versions) for versions and supported
 features.
 

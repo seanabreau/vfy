@@ -40,6 +40,7 @@ class GitReplayRecord(TypedDict):
     untracked: bool
     deleted: bool
     patch: str
+    submodule_change: str | None
 
 
 type SelectionMode = Literal["safe", "balanced", "aggressive"]

@@ -689,8 +689,9 @@ fn expand_fixture_parameter(
     if values.is_empty() {
         let (values, marks, id) =
             empty_parameter_choice(generation, std::slice::from_ref(&fixture.name))?;
+        let ids = binding.runtime.get().parameter_ids(py)?;
         ParameterIds::resolve(
-            binding.ids.as_ref().map(|value| value.bind(py)),
+            ids.as_ref().map(|value| value.bind(py)),
             1,
             generation.nodeid,
         )?;
@@ -915,8 +916,9 @@ fn fixture_identifiers(
     name: &str,
 ) -> PyResult<Vec<String>> {
     let py = generation.callable.py();
+    let declared = binding.runtime.get().parameter_ids(py)?;
     let ids = ParameterIds::resolve(
-        binding.ids.as_ref().map(|value| value.bind(py)),
+        declared.as_ref().map(|value| value.bind(py)),
         values.len(),
         generation.nodeid,
     )?;

@@ -12,11 +12,18 @@ use vfy_core::test_plan::FixtureChains;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) enum FixtureOrigin {
-    Conftest,
+    Conftest(ConftestDirectory),
     Module(CollectionNodeId),
     Class(CollectionNodeId),
     PluginRegistration(usize),
     DirectParameter,
+}
+
+/// Where a conftest sits relative to the rootdir.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum ConftestDirectory {
+    Rootdir,
+    Other,
 }
 
 impl FixtureOrigin {
@@ -25,14 +32,31 @@ impl FixtureOrigin {
     }
 
     pub(super) fn reusable(self) -> bool {
-        matches!(self, Self::Conftest | Self::PluginRegistration(_))
+        matches!(self, Self::Conftest(_) | Self::PluginRegistration(_))
+    }
+
+    /// The `FixtureDef.baseid` pytest reports for a definition with this scope key.
+    ///
+    /// pytest names the rootdir's `Directory` node `.`, while a package scope
+    /// key for the rootdir is empty.
+    pub(super) fn public_baseid(self, package_baseid: &str) -> &str {
+        match self {
+            Self::Conftest(ConftestDirectory::Rootdir) => ".",
+            Self::Conftest(ConftestDirectory::Other)
+            | Self::Module(_)
+            | Self::Class(_)
+            | Self::PluginRegistration(_)
+            | Self::DirectParameter => package_baseid,
+        }
     }
 
     pub(super) fn validate(self, collector: &Collector<'_>) -> PyResult<()> {
         let (owner, expected) = match self {
             Self::Module(owner) => (owner, CollectionNodeKind::Module),
             Self::Class(owner) => (owner, CollectionNodeKind::Class),
-            Self::Conftest | Self::PluginRegistration(_) | Self::DirectParameter => return Ok(()),
+            Self::Conftest(_) | Self::PluginRegistration(_) | Self::DirectParameter => {
+                return Ok(());
+            }
         };
         if collector.current_node != Some(owner) {
             return Err(PyRuntimeError::new_err(
