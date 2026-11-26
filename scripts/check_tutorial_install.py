@@ -59,9 +59,10 @@ def commands(
 ) -> list[subprocess.CompletedProcess[str]]:
     results = []
     for line in block(page, name).splitlines():
-        if not line.startswith("$ ") or line.endswith("\\"):
+        args = shlex.split(line)
+        if not args or line.endswith("\\"):
             raise ValueError(f"Expected a single-line command: {line!r}")
-        results.append(run(project, shlex.split(line[2:]), status))
+        results.append(run(project, args, status))
     return results
 
 
