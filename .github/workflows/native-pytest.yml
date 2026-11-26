@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "29 5 * * 3"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      merge_check:
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -21,8 +26,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
-        python: ["3.12", "3.13", "3.14", "3.15"]
+        os: ${{ fromJSON(inputs.merge_check && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-15"]') }}
+        python: ${{ fromJSON(inputs.merge_check && '["3.12"]' || '["3.12", "3.13", "3.14", "3.15"]') }}
     env:
       CARGO_TARGET_DIR: target/native-pytest/build
       PYTHONHASHSEED: "0"

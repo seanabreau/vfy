@@ -40,6 +40,7 @@ RUST_PATHS = (
 KNOWN_CODE_PATHS = (
     ".github/",
     "benchmarks/",
+    "examples/coverage/",
     "python/vfy/",
     "scripts/",
     "tests/",
@@ -53,6 +54,40 @@ DOC_BUILD_PATHS = (
     "mkdocs.yml",
     "pyproject.toml",
     "uv.lock",
+    "examples/coverage/",
+    "scripts/check_tutorial_install.py",
+)
+RELEASE_PATHS = (
+    ".github/workflows/release.yml",
+    ".github/workflows/release-verify.yml",
+    "benchmarks/benchmark_harness.py",
+    "benchmarks/benchmark_provenance.py",
+    "benchmarks/project_manifest.py",
+    "scripts/changelog_section.py",
+    "scripts/check_release_version.py",
+    "scripts/normalize_release_sboms.py",
+    "scripts/check_native_pytest_versions.sh",
+    "scripts/check_native_pytest_mock_versions.sh",
+    "scripts/process_tree.py",
+    "validation/pytest_runner/adoption_observations.py",
+    "validation/pytest_runner/check_native_adoption_matrix.py",
+    "validation/pytest_runner/check_native_xdist_adoption.py",
+    "validation/pytest_runner/native-adoption-requirements.in",
+    "validation/pytest_runner/native-adoption-requirements.txt",
+    "validation/pytest_runner/patches/",
+    "validation/pytest_runner/real_packages/",
+)
+CORPUS_PATHS = (
+    ".github/workflows/native-pytest.yml",
+    "benchmarks/benchmark_harness.py",
+    "benchmarks/benchmark_provenance.py",
+    "benchmarks/locks/rich.txt",
+    "benchmarks/prepare_projects.py",
+    "benchmarks/project_manifest.py",
+    "docs/about/pytest-test-identity.json",
+    "docs/about/pytest-test-policy.json",
+    "scripts/process_tree.py",
+    "scripts/pytest_environment_lock.py",
 )
 
 
@@ -62,6 +97,8 @@ class ChangePlan:
 
     scope: str
     check_docs: bool
+    check_release: bool = False
+    check_corpus: bool = False
 
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:
@@ -77,35 +114,52 @@ def classify(paths: list[str]) -> ChangePlan:
     normalized = [path.replace("\\", "/") for path in paths if path]
     if not normalized:
         return ChangePlan("unknown", True)
-    non_documentation = [path for path in normalized if not _matches(path, DOC_PATHS)]
+    check_release = any(_matches(path, RELEASE_PATHS) for path in normalized)
+    check_corpus = any(
+        _matches(path, CORPUS_PATHS)
+        or path.startswith(("scripts/pytest_corpus_", "scripts/pytest_execution_"))
+        or (path.startswith("validation/pytest_runner/") and not _matches(path, RELEASE_PATHS))
+        for path in normalized
+    )
+    non_documentation = [
+        path for path in normalized if not _matches(path, DOC_PATHS) or _matches(path, CORPUS_PATHS)
+    ]
     if not non_documentation:
         return ChangePlan("documentation", True)
-    if any(not _matches(path, (*RUST_PATHS, *KNOWN_CODE_PATHS)) for path in non_documentation):
-        return ChangePlan("unknown", True)
+    if any(
+        not _matches(path, (*RUST_PATHS, *KNOWN_CODE_PATHS, *CORPUS_PATHS))
+        for path in non_documentation
+    ):
+        return ChangePlan("unknown", True, check_release, check_corpus)
     check_docs = any(_matches(path, DOC_BUILD_PATHS) for path in normalized)
     scope = "rust" if any(_matches(path, RUST_PATHS) for path in non_documentation) else "code"
-    return ChangePlan(scope, check_docs)
+    return ChangePlan(scope, check_docs, check_release, check_corpus)
 
 
 def changed_paths(base: str | None) -> list[str]:
-    """Read changed paths from Git, falling back to the conservative plan."""
+    """Read the diff from Git and reject an unavailable pull request base."""
 
-    if base:
-        completed = subprocess.run(
-            # Classify both ends of a rename, including code moved into docs.
-            ["git", "diff", "--no-renames", "--name-only", "-z", f"{base}...HEAD"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode == 0:
-            return [path for path in completed.stdout.split("\0") if path]
-    return []
+    if base is None:
+        return []
+    if not base:
+        raise ValueError("--base must name a Git revision")
+    completed = subprocess.run(
+        # Classify both ends of a rename, including code moved into docs.
+        ["git", "diff", "--no-renames", "--name-only", "-z", f"{base}...HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode:
+        raise ValueError(completed.stderr.strip() or "Git could not read the pull request diff")
+    return [path for path in completed.stdout.split("\0") if path]
 
 
 def _write_outputs(plan: ChangePlan, output: TextIO) -> None:
     print(f"scope={plan.scope}", file=output)
     print(f"check_docs={str(plan.check_docs).lower()}", file=output)
+    print(f"check_release={str(plan.check_release).lower()}", file=output)
+    print(f"check_corpus={str(plan.check_corpus).lower()}", file=output)
 
 
 def main() -> int:
@@ -115,7 +169,10 @@ def main() -> int:
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
 
-    paths = args.path or changed_paths(args.base)
+    try:
+        paths = args.path or changed_paths(args.base)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     plan = classify(paths)
     if args.github_output is None:
         _write_outputs(plan, sys.stdout)

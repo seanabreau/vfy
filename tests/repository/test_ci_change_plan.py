@@ -42,6 +42,8 @@ def plan(*paths: str) -> dict[str, str]:
         (("uv.lock",), "rust", "true"),
         ((".github/workflows/docs.yml",), "code", "true"),
         ((".github/workflows/ci.yml", "scripts/check_ci_results.sh"), "code", "false"),
+        (("examples/coverage/pyproject.toml", "python/vfy/cli.py"), "code", "true"),
+        (("scripts/check_tutorial_install.py",), "code", "true"),
         (("tests/fixtures/semantic/boolean_expression.md",), "code", "false"),
         (("README.pypi.md",), "code", "false"),
         (("README.md.backup",), "unknown", "true"),
@@ -52,7 +54,36 @@ def plan(*paths: str) -> dict[str, str]:
 def test_changed_paths_select_required_checks(
     paths: tuple[str, ...], scope: str, check_docs: str
 ) -> None:
-    assert plan(*paths) == {"scope": scope, "check_docs": check_docs}
+    assert plan(*paths) == {
+        "scope": scope,
+        "check_docs": check_docs,
+        "check_release": "false",
+        "check_corpus": "false",
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "release", "corpus"),
+    [
+        (".github/workflows/release.yml", "true", "false"),
+        (".github/workflows/release-verify.yml", "true", "false"),
+        ("scripts/check_native_pytest_versions.sh", "true", "false"),
+        ("validation/pytest_runner/check_native_adoption_matrix.py", "true", "false"),
+        ("validation/pytest_runner/real_packages/corpus.py", "true", "false"),
+        (".github/workflows/native-pytest.yml", "false", "true"),
+        ("scripts/pytest_corpus_execution.py", "false", "true"),
+        ("scripts/process_tree.py", "true", "true"),
+        ("docs/about/pytest-test-policy.json", "false", "true"),
+        ("validation/pytest_runner/check_native_project.py", "false", "true"),
+        ("benchmarks/benchmark_provenance.py", "true", "true"),
+        ("benchmarks/locks/rich.txt", "false", "true"),
+    ],
+)
+def test_validation_tooling_selects_its_workflow(path: str, release: str, corpus: str) -> None:
+    result = plan(path)
+    assert result["scope"] == "code"
+    assert result["check_release"] == release
+    assert result["check_corpus"] == corpus
 
 
 def test_github_output_preserves_existing_step_outputs(tmp_path: Path) -> None:
@@ -69,7 +100,22 @@ def test_github_output_preserves_existing_step_outputs(tmp_path: Path) -> None:
         "cache_key=candidate",
         "scope=documentation",
         "check_docs=true",
+        "check_release=false",
+        "check_corpus=false",
     ]
+
+
+@pytest.mark.parametrize("base", ["", "not-a-ci-base"])
+def test_unavailable_diff_cannot_skip_targeted_checks(base: str, tmp_path: Path) -> None:
+    output = tmp_path / "github-output"
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", base, "--github-output", str(output)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert not output.exists()
 
 
 def test_renaming_runtime_code_into_docs_keeps_the_wheel_check(tmp_path: Path) -> None:
@@ -99,4 +145,6 @@ def test_renaming_runtime_code_into_docs_keeps_the_wheel_check(tmp_path: Path) -
     assert dict(line.split("=", 1) for line in completed.stdout.splitlines()) == {
         "scope": "code",
         "check_docs": "true",
+        "check_release": "false",
+        "check_corpus": "false",
     }

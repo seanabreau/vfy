@@ -88,18 +88,27 @@ request runs repository checks, dependency hygiene, and workflow analysis.
 | Code, tests, or workflow files | Build one Linux wheel and run the complete Python suite on CPython 3.12 |
 | Rust crates, build metadata, lockfiles, or Rust test scripts | Linux wheel and Linux Rust lints, workspace tests, and snapshot checks |
 | Missing or unrecognized paths | Linux wheel, Rust checks, and strict site build |
+| Release workflow, packaging checks, or adoption tooling | Release verification with the platform matrix and pinned adoption suites |
+| Native corpus workflow, corpus tooling, or corpus policy | Installed-wheel corpus on Linux CPython 3.12 alongside the regular merge checks |
 
-Mixed changes that affect the site also run the strict site build. The
-Linux wheel suite runs the executable examples in mixed changes.
+Release verification covers the wheel and Rust checks for its pull request.
+Mixed changes that affect the site or tutorial inputs also run the strict site
+build and standalone tutorial installs. The installed-wheel suite runs the
+executable examples in mixed changes.
 
 The `CI summary` gate requires the change classification and every selected job
 to succeed. Missing, cancelled, or skipped required jobs fail it. GitHub
 requires the check for the pull request against the current base.
+[Branch rules](https://github.com/seanabreau/vfy/rules)
 
 Pushes to `main` that affect the site trigger documentation deployment. The
-native pytest corpus runs weekly and on manual dispatch. Run the Benchmarks
+full native pytest corpus runs weekly and on manual dispatch. Run the Benchmarks
 workflow manually to compare the selected revision with its first parent.
 `tests/repository/test_workflows.py` checks job timeouts.
+
+For compatibility changes, retain the pinned differential proof required by
+`AGENTS.md`. The [native adoption subset](native-pytest-testing.md#required-adoption-subset)
+provides a local real-project comparison for runner changes.
 
 See [Release validation](#release-validation) for the checks on candidates and tags.
 

@@ -11,6 +11,19 @@ require_result() {
     fi
 }
 
+require_selected() {
+    local job=$1 selection=$2
+    local selected=${!selection:-missing}
+    case "$selected" in
+        true) require_result "$job" success ;;
+        false) require_result "$job" skipped ;;
+        *)
+            echo "$selection: expected true or false, got $selected" >&2
+            exit 1
+            ;;
+    esac
+}
+
 for job in CHANGE_SCOPE REPOSITORY SUPPLY_CHAIN WORKFLOW_SECURITY; do
     require_result "$job" success
 done
@@ -18,19 +31,19 @@ done
 case "${SCOPE:-}" in
     documentation)
         require_result CHECK_DOCS true
-        require_result LINUX_WHEEL skipped
-        require_result RUST skipped
+        wheel=skipped
+        rust=skipped
         ;;
     code)
-        require_result LINUX_WHEEL success
-        require_result RUST skipped
+        wheel=success
+        rust=skipped
         ;;
     rust|unknown)
         if [[ "$SCOPE" == unknown ]]; then
             require_result CHECK_DOCS true
         fi
-        require_result LINUX_WHEEL success
-        require_result RUST success
+        wheel=success
+        rust=success
         ;;
     *)
         echo "unexpected CI scope: ${SCOPE:-missing}" >&2
@@ -38,11 +51,12 @@ case "${SCOPE:-}" in
         ;;
 esac
 
-case "${CHECK_DOCS:-}" in
-    true) require_result DOCUMENTATION success ;;
-    false) require_result DOCUMENTATION skipped ;;
-    *)
-        echo "unexpected documentation check selection: ${CHECK_DOCS:-missing}" >&2
-        exit 1
-        ;;
-esac
+require_selected DOCUMENTATION CHECK_DOCS
+require_selected RELEASE CHECK_RELEASE
+require_selected NATIVE_CORPUS CHECK_CORPUS
+if [[ "$CHECK_RELEASE" == true ]]; then
+    wheel=skipped
+    rust=skipped
+fi
+require_result LINUX_WHEEL "$wheel"
+require_result RUST "$rust"

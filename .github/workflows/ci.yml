@@ -23,6 +23,8 @@ jobs:
     outputs:
       scope: ${{ steps.classify.outputs.scope }}
       check_docs: ${{ steps.classify.outputs.check_docs }}
+      check_release: ${{ steps.classify.outputs.check_release }}
+      check_corpus: ${{ steps.classify.outputs.check_corpus }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,12 +106,13 @@ jobs:
         run: |
           uv sync --locked --group dev
           uv run --no-sync pytest -q tests/integration/test_documentation.py tests/integration/test_documented_semantic.py
-          uv run --no-sync python scripts/check_tutorial_install.py
+      - name: Install and run the pinned standalone tutorials
+        run: uv run --no-sync python scripts/check_tutorial_install.py
 
   linux-wheel:
     name: Test Linux wheel on Python 3.12
     needs: change-scope
-    if: needs.change-scope.outputs.scope != 'documentation'
+    if: needs.change-scope.outputs.scope != 'documentation' && needs.change-scope.outputs.check_release != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -131,7 +134,7 @@ jobs:
       - name: Smoke test the wheel in an empty environment
         run: |
           uv venv --python 3.12 target/wheel-smoke
-          uv pip install --python target/wheel-smoke/bin/python --no-deps dist/vfy-*.whl
+          uv pip install --no-index --python target/wheel-smoke/bin/python dist/vfy-*.whl
           target/wheel-smoke/bin/python scripts/smoke_wheel.py
       - name: Install the locked test dependencies and the built wheel
         run: |
@@ -145,7 +148,9 @@ jobs:
   rust:
     name: Rust lints and workspace tests
     needs: change-scope
-    if: needs.change-scope.outputs.scope == 'rust' || needs.change-scope.outputs.scope == 'unknown'
+    if: >-
+      needs.change-scope.outputs.check_release != 'true' &&
+      (needs.change-scope.outputs.scope == 'rust' || needs.change-scope.outputs.scope == 'unknown')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -162,6 +167,8 @@ jobs:
         run: uv sync --locked --group dev
       - name: Lint Rust targets
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Test the Rust core without the extension environment
+        run: env -u PYO3_PYTHON cargo test --locked --manifest-path crates/vfy-core/Cargo.toml
       - name: Install Rust test runners
         uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2.86.5
         with:
@@ -169,6 +176,24 @@ jobs:
           fallback: none
       - name: Test the Rust workspace and check reviewed snapshots
         run: scripts/cargo-insta-test.sh --locked --workspace --no-default-features
+
+  release-tooling:
+    name: Check release tooling
+    needs: change-scope
+    if: needs.change-scope.outputs.check_release == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-verify.yml
+
+  corpus-tooling:
+    name: Check native corpus tooling
+    needs: change-scope
+    if: needs.change-scope.outputs.check_corpus == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-pytest.yml
+    with:
+      merge_check: true
 
   supply-chain:
     name: Dependency hygiene, licenses and advisories
@@ -209,7 +234,7 @@ jobs:
   ci-summary:
     name: CI summary
     if: always()
-    needs: [change-scope, repository, documentation, linux-wheel, rust, supply-chain, workflow-security]
+    needs: [change-scope, repository, documentation, linux-wheel, rust, release-tooling, corpus-tooling, supply-chain, workflow-security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -223,10 +248,14 @@ jobs:
           CHANGE_SCOPE: ${{ needs.change-scope.result }}
           SCOPE: ${{ needs.change-scope.outputs.scope }}
           CHECK_DOCS: ${{ needs.change-scope.outputs.check_docs }}
+          CHECK_RELEASE: ${{ needs.change-scope.outputs.check_release }}
+          CHECK_CORPUS: ${{ needs.change-scope.outputs.check_corpus }}
           REPOSITORY: ${{ needs.repository.result }}
           DOCUMENTATION: ${{ needs.documentation.result }}
           LINUX_WHEEL: ${{ needs.linux-wheel.result }}
           RUST: ${{ needs.rust.result }}
+          RELEASE: ${{ needs.release-tooling.result }}
+          NATIVE_CORPUS: ${{ needs.corpus-tooling.result }}
           SUPPLY_CHAIN: ${{ needs.supply-chain.result }}
           WORKFLOW_SECURITY: ${{ needs.workflow-security.result }}
         run: bash scripts/check_ci_results.sh

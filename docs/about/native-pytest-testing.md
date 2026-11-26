@@ -233,7 +233,8 @@ This optional matrix does not change the required five-project CI subset.
 
 The [native pytest workflow](https://github.com/seanabreau/vfy/blob/main/.github/workflows/native-pytest.yml)
 is configured for Linux and macOS with Python 3.12–3.15. It runs weekly on
-`main` and on manual dispatch. It installs matching artifacts
+`main` and on manual dispatch. Pull requests that change its tooling run the
+Linux CPython 3.12 lane. The workflow installs matching artifacts
 in separate reference and candidate environments, runs the integration suites
 and focused differential checkers, then compares the
 [pinned upstream corpus](pytest-test-suite.md).

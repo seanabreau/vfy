@@ -13,7 +13,8 @@ pytestmark = pytest.mark.skipif(
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "check_ci_results.sh"
 COMMON = {"CHANGE_SCOPE", "REPOSITORY", "SUPPLY_CHAIN", "WORKFLOW_SECURITY"}
-JOBS = COMMON | {"DOCUMENTATION", "LINUX_WHEEL", "RUST"}
+JOBS = COMMON | {"DOCUMENTATION", "LINUX_WHEEL", "RUST", "RELEASE", "NATIVE_CORPUS"}
+SELECTIONS = {"CHECK_DOCS", "CHECK_RELEASE", "CHECK_CORPUS"}
 PLANS = [
     ("documentation", "true", {"DOCUMENTATION"}),
     ("code", "false", {"LINUX_WHEEL"}),
@@ -21,6 +22,9 @@ PLANS = [
     ("rust", "false", {"LINUX_WHEEL", "RUST"}),
     ("rust", "true", {"LINUX_WHEEL", "RUST", "DOCUMENTATION"}),
     ("unknown", "true", {"LINUX_WHEEL", "RUST", "DOCUMENTATION"}),
+    ("code", "false", {"RELEASE"}),
+    ("rust", "true", {"RELEASE", "DOCUMENTATION", "NATIVE_CORPUS"}),
+    ("code", "false", {"LINUX_WHEEL", "NATIVE_CORPUS"}),
 ]
 
 
@@ -28,13 +32,15 @@ def results(scope: str, check_docs: str, selected: set[str]) -> dict[str, str]:
     return {
         "SCOPE": scope,
         "CHECK_DOCS": check_docs,
+        "CHECK_RELEASE": str("RELEASE" in selected).lower(),
+        "CHECK_CORPUS": str("NATIVE_CORPUS" in selected).lower(),
         **{job: "success" if job in COMMON | selected else "skipped" for job in JOBS},
     }
 
 
 def check(values: dict[str, str]) -> subprocess.CompletedProcess[str]:
     environment = {
-        key: value for key, value in os.environ.items() if key not in JOBS | {"SCOPE", "CHECK_DOCS"}
+        key: value for key, value in os.environ.items() if key not in JOBS | SELECTIONS | {"SCOPE"}
     }
     return subprocess.run(
         ["bash", str(SCRIPT)],
@@ -83,11 +89,12 @@ def test_missing_or_unrecognized_scope_cannot_report_success(scope: str) -> None
     assert "unexpected CI scope" in completed.stderr
 
 
-@pytest.mark.parametrize("check_docs", ["", "invalid"])
-def test_invalid_documentation_selection_cannot_report_success(check_docs: str) -> None:
-    completed = check(results("code", check_docs, {"LINUX_WHEEL"}))
+@pytest.mark.parametrize("selection", sorted(SELECTIONS))
+@pytest.mark.parametrize("value", ["", "invalid"])
+def test_invalid_job_selection_cannot_report_success(selection: str, value: str) -> None:
+    completed = check({**results("code", "false", {"LINUX_WHEEL"}), selection: value})
     assert completed.returncode != 0
-    assert "unexpected documentation check selection" in completed.stderr
+    assert f"{selection}: expected true or false" in completed.stderr
 
 
 @pytest.mark.parametrize(
