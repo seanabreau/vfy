@@ -18,7 +18,9 @@ use crate::test_execution::{
 use sha2::{Digest, Sha256};
 
 use crate::html::escape;
-use crate::output::{PreparedFile, PublishedFile, prepare, restore};
+use crate::output::{
+    PreparedFile, PublishedFile, prepare_publication, publication_target, restore,
+};
 use crate::{CoreError, absolute_path, atomic_write};
 
 // Python strict decoding permits nonzero unused bits in the final base64 digit.
@@ -478,7 +480,7 @@ fn resolve_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<Vec<Output<'_>>, Co
             Err(error) => return Err(artifact_error(path, "inspect pytest HTML output", error)),
         };
         let destination = if metadata.as_ref().is_some_and(std::fs::Metadata::is_symlink) {
-            absolute_path(path)
+            path.clone()
         } else {
             parent.join(path.file_name().ok_or_else(|| {
                 CoreError::InvalidInput("pytest HTML output requires a filename".to_owned())
@@ -514,11 +516,12 @@ fn resolve_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<Vec<Output<'_>>, Co
 fn commit_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<(), CoreError> {
     // A single output needs no rollback copy: atomic_write preserves it on failure.
     if let [(path, content)] = outputs {
-        return atomic_write(&absolute_path(path), content)
+        return atomic_write(path, content)
             .map_err(|error| artifact_error(path, "write pytest HTML output", error));
     }
     let mut prepared = Vec::with_capacity(outputs.len());
     let mut created_parents = BTreeSet::new();
+    let mut resolved = BTreeSet::new();
     for Output {
         destination,
         content,
@@ -531,18 +534,13 @@ fn commit_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<(), CoreError> {
             if created_parents.insert(parent.to_path_buf()) {
                 std::fs::create_dir_all(parent)?;
             }
-            let previous = match prepare(&destination, parent) {
-                Ok(previous) => Some(previous),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error),
-            };
-            let mut replacement = tempfile::NamedTempFile::new_in(parent)?;
-            replacement.write_all(content)?;
-            Ok(PreparedFile {
-                destination: destination.clone(),
-                replacement,
-                previous,
-            })
+            let (path, mode) = publication_target(&destination)?;
+            if !resolved.insert(path.clone()) {
+                return Err(std::io::Error::other(
+                    "pytest HTML outputs share the same target",
+                ));
+            }
+            prepare_publication(path, mode, |file| file.write_all(content))
         };
         prepared.push(
             prepare_output().map_err(|error| {
