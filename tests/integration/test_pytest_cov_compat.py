@@ -605,7 +605,7 @@ def _terminal_table(result: CommandResult) -> list[str]:
 @pytest.mark.parametrize(
     "report", ["term", "term-missing", "term:skip-covered", "term-missing:skip-covered"]
 )
-@pytest.mark.parametrize("skip_covered", [None, "true"])
+@pytest.mark.parametrize("skip_covered", [None, "true", "false"])
 @pytest.mark.parametrize("show_missing", [None, "true", "false"])
 def test_terminal_report_settings_combine_with_report_options_like_pytest_cov(
     tmp_path: Path, report: str, show_missing: str | None, skip_covered: str | None
