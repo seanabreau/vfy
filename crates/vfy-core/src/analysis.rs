@@ -68,6 +68,17 @@ pub struct WithJump {
     pub body_start: i32,
     pub body_end: i32,
     pub after: i32,
+    pub header_exit: WithHeaderExit,
+}
+
+/// Whether the rewrite drops a measured arc from the header to `after`.
+///
+/// Coverage.py keeps that arc as a branch for a `with` statement that ends a
+/// suite chained through two enclosing `with` statements.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WithHeaderExit {
+    Removed,
+    Retained,
 }
 
 /// Source scope reached by a branch ending at a negative code-object exit.

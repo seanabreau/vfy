@@ -13,8 +13,8 @@ use fancy_regex::Regex;
 use rayon::prelude::*;
 
 use crate::analysis::{
-    CodeRegion, ExitDescription, PythonSemantics, SourceAnalysis, SourceFailure, WithJump,
-    analyze_cached, analyze_uncached_with_patterns, compile_patterns,
+    CodeRegion, ExitDescription, PythonSemantics, SourceAnalysis, SourceFailure, WithHeaderExit,
+    WithJump, analyze_cached, analyze_uncached_with_patterns, compile_patterns,
 };
 use crate::data::{Arc, CoverageData, ReportInput};
 use crate::path::{absolute_path, discover_python_source_files, glob_path};
@@ -579,16 +579,18 @@ fn fix_with_jumps(mut arcs: BTreeSet<Arc>, jumps: &[WithJump]) -> BTreeSet<Arc> 
                         *destination == jump.header
                             && (jump.body_start..=jump.body_end).contains(origin)
                     })
-                    .map(|arc| (*arc, (arc.0, jump.after), (jump.header, jump.after))),
+                    .map(|arc| (*arc, (arc.0, jump.after), jump)),
             );
         }
         if replacements.is_empty() {
             return arcs;
         }
         let mut changed = false;
-        for (measured, corrected, redundant) in replacements {
+        for (measured, corrected, jump) in replacements {
             changed |= arcs.remove(&measured);
-            arcs.remove(&redundant);
+            if jump.header_exit == WithHeaderExit::Removed {
+                arcs.remove(&(jump.header, jump.after));
+            }
             arcs.insert(corrected);
         }
         if !changed {
