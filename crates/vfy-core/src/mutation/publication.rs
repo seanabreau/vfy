@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::output::{PreparedFile, PublishedFile, file_digest, prepare, restore};
+use crate::output::{PublishedFile, file_digest, prepare_publication, publication_target, restore};
 
 /// The artifact written by a mutation run.
 #[derive(Clone, Copy, Ord, PartialEq, PartialOrd, Eq)]
@@ -49,7 +49,7 @@ impl MutationPublication {
             if !kinds.insert(*kind) {
                 return Err(io::Error::other("mutation artifact roles overlap"));
             }
-            let path = crate::absolute_path(path);
+            let (path, _) = publication_target(path)?;
             if !destinations.insert(path) {
                 return Err(io::Error::other("mutation artifact destinations overlap"));
             }
@@ -185,6 +185,7 @@ impl MutationPublication {
         self.validate_prepared_baseline()?;
         let mut changed = Vec::new();
         for file in &self.files {
+            publication_target(&file.destination)?;
             if file_digest(&file.destination)? != file.previous_digest {
                 return Err(io::Error::other(
                     "mutation artifact changed before publication",
@@ -211,16 +212,11 @@ impl MutationPublication {
                 .parent()
                 .ok_or_else(|| io::Error::other("mutation artifact requires a parent"))?;
             std::fs::create_dir_all(parent)?;
-            let previous = match prepare(&file.destination, parent) {
-                Ok(previous) => Some(previous),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error),
-            };
-            prepared.push(PreparedFile {
-                destination: file.destination.clone(),
-                replacement: prepare(&file.staged, parent)?,
-                previous,
-            });
+            let (destination, mode) = publication_target(&file.destination)?;
+            prepared.push(prepare_publication(destination, mode, |output| {
+                io::copy(&mut std::fs::File::open(&file.staged)?, output)?;
+                Ok(())
+            })?);
         }
         let mut published = Vec::with_capacity(prepared.len());
         for file in prepared {

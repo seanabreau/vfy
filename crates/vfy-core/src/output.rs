@@ -48,10 +48,16 @@ fn hex(digest: &[u8]) -> String {
     output
 }
 
-/// Replace a destination only after the complete content has been written.
+/// Write a destination as Python's `open(path, "w")` would, but atomically for files.
+///
+/// A symbolic link is followed and its final target is replaced, so the link
+/// survives; a dangling link creates its target. An existing regular file keeps
+/// its permission bits, and a new file gets `0o666` less the process umask. A
+/// device, FIFO, or socket is written in place, without an atomicity guarantee.
+/// The parent directory of `path` is created when missing.
 ///
 /// # Errors
-/// Returns the filesystem error without replacing the destination on failure.
+/// Returns the filesystem error. A regular-file destination is unchanged on failure.
 pub fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
     atomic_write_with(path, |file| file.write_all(content), |error| error)
 }
@@ -66,12 +72,176 @@ pub(crate) fn atomic_write_with<E>(
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent).map_err(&io_error)?;
-    let mut temporary = NamedTempFile::new_in(parent).map_err(&io_error)?;
-    write(temporary.as_file_mut())?;
-    temporary
-        .persist(path)
-        .map_err(|error| io_error(error.error))?;
+    match output_target(path).map_err(&io_error)? {
+        OutputTarget::Stream => {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(path)
+                .map_err(&io_error)?;
+            write(&mut file)
+        }
+        OutputTarget::File { path, mode } => {
+            check_writable(&path, mode).map_err(&io_error)?;
+            let mut temporary = replacement_file(&path, mode, NEW_FILE_MODE).map_err(&io_error)?;
+            write(temporary.as_file_mut())?;
+            temporary
+                .persist(&path)
+                .map_err(|error| io_error(error.error))?;
+            Ok(())
+        }
+    }
+}
+
+/// Mode Python's `open(path, "w")` requests for a new file, before the umask.
+pub(crate) const NEW_FILE_MODE: u32 = 0o666;
+
+/// Where a replacement for an output path is written.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum OutputTarget {
+    /// Replace this regular file, or create it. `mode` holds the permission
+    /// bits of an existing file.
+    File { path: PathBuf, mode: Option<u32> },
+    /// The destination is a device, FIFO, or socket; renaming over it would
+    /// replace the node instead of writing to it.
+    Stream,
+}
+
+/// Resolve the file an output path names, following symbolic links.
+///
+/// # Errors
+/// Returns an error when a link cannot be read or forms a cycle.
+pub(crate) fn output_target(path: &Path) -> io::Result<OutputTarget> {
+    const MAX_LINKS: usize = 40;
+    let mut current = path.to_path_buf();
+    for depth in 0..=MAX_LINKS {
+        if descriptor_path(&current) {
+            return Ok(OutputTarget::Stream);
+        }
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.is_symlink() => {
+                if depth == MAX_LINKS {
+                    break;
+                }
+                let target = std::fs::read_link(&current)?;
+                current = match current.parent() {
+                    Some(parent) if target.is_relative() => parent.join(target),
+                    _ => target,
+                };
+            }
+            Ok(metadata) if metadata.is_file() => {
+                return Ok(OutputTarget::File {
+                    path: crate::path::canonical_path(&current)?,
+                    mode: Some(permission_bits(&metadata)),
+                });
+            }
+            Ok(metadata) if metadata.is_dir() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::IsADirectory,
+                    "Is a directory",
+                ));
+            }
+            Ok(_) => return Ok(OutputTarget::Stream),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(OutputTarget::File {
+                    path: crate::absolute_path(&current),
+                    mode: None,
+                });
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::other(format!(
+        "too many levels of symbolic links: {}",
+        path.display()
+    )))
+}
+
+// A procfs descriptor can refer to a regular file. Renaming its pathname
+// would leave the already-open descriptor pointing at the original bytes.
+#[cfg(target_os = "linux")]
+fn descriptor_path(path: &Path) -> bool {
+    if !path
+        .file_name()
+        .is_some_and(|name| name.as_encoded_bytes().iter().all(u8::is_ascii_digit))
+    {
+        return false;
+    }
+    path.parent()
+        .and_then(|parent| parent.canonicalize().ok())
+        .is_some_and(|parent| parent.starts_with("/proc") && parent.ends_with("fd"))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn descriptor_path(_path: &Path) -> bool {
+    false
+}
+
+fn check_writable(path: &Path, mode: Option<u32>) -> io::Result<()> {
+    if mode.is_some() {
+        // A rename would otherwise bypass the destination file's permissions.
+        std::fs::OpenOptions::new().write(true).open(path)?;
+    }
     Ok(())
+}
+
+#[cfg(unix)]
+fn permission_bits(metadata: &std::fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt as _;
+    metadata.permissions().mode() & 0o7777
+}
+
+#[cfg(not(unix))]
+fn permission_bits(_metadata: &std::fs::Metadata) -> u32 {
+    NEW_FILE_MODE
+}
+
+/// Create a temporary file beside `destination` that can replace it by rename.
+///
+/// The file gets `mode` when the destination exists, and otherwise
+/// `new_mode` less the process umask, which the kernel applies at creation.
+///
+/// # Errors
+/// Returns an error when the file cannot be created or its mode set.
+pub(crate) fn replacement_file(
+    destination: &Path,
+    mode: Option<u32>,
+    new_mode: u32,
+) -> io::Result<NamedTempFile> {
+    let parent = destination
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    temporary_in(parent, mode, new_mode, "")
+}
+
+fn temporary_in(
+    parent: &Path,
+    mode: Option<u32>,
+    new_mode: u32,
+    suffix: &str,
+) -> io::Result<NamedTempFile> {
+    let mut builder = tempfile::Builder::new();
+    builder.suffix(suffix);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        builder.permissions(std::fs::Permissions::from_mode(new_mode));
+    }
+    #[cfg(not(unix))]
+    let _ = new_mode;
+    let temporary = builder.tempfile_in(parent)?;
+    #[cfg(unix)]
+    if let Some(mode) = mode {
+        use std::os::unix::fs::PermissionsExt as _;
+        // Unlike creation, an explicit mode change is not reduced by the umask.
+        temporary
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(mode))?;
+    }
+    #[cfg(not(unix))]
+    let _ = mode;
+    Ok(temporary)
 }
 
 /// Encode JSON with sorted object keys and Python-compatible ASCII escapes.
@@ -148,13 +318,45 @@ pub(crate) struct PublishedFile {
     pub(crate) previous: Option<NamedTempFile>,
 }
 
+/// Copy `source`, with its permission bits, into a temporary file in `parent`.
 pub(crate) fn prepare(source: &Path, parent: &Path) -> io::Result<NamedTempFile> {
     let mut input = std::fs::File::open(source)?;
-    let mut temporary = tempfile::Builder::new()
-        .suffix(".vfy-watch")
-        .tempfile_in(parent)?;
+    let mode = permission_bits(&input.metadata()?);
+    let mut temporary = temporary_in(parent, Some(mode), NEW_FILE_MODE, ".vfy-watch")?;
     io::copy(&mut input, &mut temporary)?;
     Ok(temporary)
+}
+
+/// Resolve a target that can be published and rolled back with a rename.
+pub(crate) fn publication_target(destination: &Path) -> io::Result<(PathBuf, Option<u32>)> {
+    let OutputTarget::File { path, mode } = output_target(destination)? else {
+        return Err(io::Error::other(format!(
+            "files published together can only replace regular files: {}",
+            destination.display()
+        )));
+    };
+    Ok((path, mode))
+}
+
+/// Stage replacement bytes and the original file beside the resolved target.
+pub(crate) fn prepare_publication(
+    path: PathBuf,
+    mode: Option<u32>,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+) -> io::Result<PreparedFile> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("output requires a parent directory"))?;
+    check_writable(&path, mode)?;
+    let previous = mode.map(|_| prepare(&path, parent)).transpose()?;
+    // Watch ignores this suffix, so staging cannot make its own run obsolete.
+    let mut temporary = temporary_in(parent, mode, NEW_FILE_MODE, ".vfy-watch")?;
+    write(temporary.as_file_mut())?;
+    Ok(PreparedFile {
+        destination: path,
+        replacement: temporary,
+        previous,
+    })
 }
 
 pub(crate) fn restore(files: Vec<PublishedFile>) -> io::Result<()> {
