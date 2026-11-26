@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from vfy.errors import NoDataError
 from vfy.independent.configuration import PytestConfiguration as _PytestConfiguration
 from vfy.invocation_preparation import pytest_option as _pytest_option
 from vfy.native import (
@@ -99,9 +100,18 @@ def _write_coverage_reports(
         write_pytest_reports,
     )
 
+    reports = _pytest_reports(pytest_args)
+    threshold_value = _pytest_option(pytest_args, "--cov-fail-under")
+    threshold = (
+        float(threshold_value)
+        if threshold_value is not None
+        else config.get("report", {}).get("fail_under")
+    )
     decisions = "--cov-decisions" in pytest_args or bool(
         config.get("vfy", {}).get("run", {}).get("decisions", False)
     )
+    if not (reports or threshold or decisions):
+        return True
     cov_config = _pytest_option(pytest_args, "--cov-config")
     coverage = Coverage(
         data_file=args.data_file,
@@ -120,26 +130,24 @@ def _write_coverage_reports(
         if precision_value is not None
         else int(config.get("report", {}).get("precision", 0))
     )
-    with coverage._report_batch():
-        total, semantic = write_pytest_reports(
-            coverage,
-            _pytest_reports(pytest_args),
-            config,
-            sys.stdout,
-            precision=precision,
-            decisions=decisions,
-            decision_report=_pytest_option(pytest_args, "--cov-decision-report"),
-            source=coverage.source,
-            history_path=str(Path(args.history).resolve()),
-        )
+    try:
+        with coverage._report_batch():
+            total, semantic = write_pytest_reports(
+                coverage,
+                reports,
+                config,
+                sys.stdout,
+                precision=precision,
+                decisions=decisions,
+                decision_report=_pytest_option(pytest_args, "--cov-decision-report"),
+                source=coverage.source,
+                history_path=str(Path(args.history).resolve()),
+            )
+    except NoDataError as error:
+        print(f"\nWARNING: Failed to generate report: {error}\n")
+        total, semantic = 0.0, None
     if os.environ.get("VFY_MUTATION_BASELINE_COVERAGE") == "implicit":
         return True
-    threshold_value = _pytest_option(pytest_args, "--cov-fail-under")
-    threshold = (
-        float(threshold_value)
-        if threshold_value is not None
-        else config.get("report", {}).get("fail_under")
-    )
     threshold_failed = threshold is not None and pytest_coverage_threshold_failed(
         total, float(threshold), precision
     )

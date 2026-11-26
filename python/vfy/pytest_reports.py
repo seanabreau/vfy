@@ -85,10 +85,6 @@ def write_pytest_reports(
     ignore_errors: bool | None = None,
 ) -> tuple[float, DecisionReport | None]:
     """Render pytest reports from one already-complete coverage dataset."""
-    if not coverage.get_data().measured_files():
-        stream.write("WARNING: No data was collected.\n")
-        return 0.0, None
-
     total: float | None = None
     if TERM_REPORTS & reports.keys():
         # Like pytest-cov, a report option only enables a setting; None leaves
