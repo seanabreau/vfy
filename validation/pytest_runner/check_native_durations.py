@@ -56,7 +56,7 @@ def run_case(
         (
             "--isolated",
             "test",
-            f"--engine={'native' if candidate else 'pytest'}",
+            f"--engine={'pytest-native' if candidate else 'pytest'}",
             "--workers=1",
             "--no-replay",
             "--history",
