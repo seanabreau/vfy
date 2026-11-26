@@ -106,18 +106,21 @@ illustrative:
 ```text
 Changed code: /path/to/project/src/bounds.py
 Affected code: 1 functions, 0 branches
-Selected 1 / 2 tests (after collection)
-Tests outside the selection were skipped; `vfy test --all` runs everything
+Selected 1 / 2 tests (from the saved baseline; collection follows)
+`vfy test --all` runs everything
 Estimated selected suite: 0.00s
 Estimated full suite: 0.00s
 ...test output...
 Reused 1 tests; complete coverage reconstructed from passing baseline 1a2b3c4d
 ```
 
-For independent execution, the selection denominator is the complete test
-inventory: the collected tests plus, under scoped collection, the baseline IDs
-of files it did not collect. The installed pytest routes can collect fewer tests
-because vfy skips unaffected files before collection.
+vfy prints the selection before pytest starts, using the saved baseline's test
+inventory. If independent collection then selects different tests, vfy prints
+the selection it applied, marked `(after collection)`, once the run ends. It
+also reports any reasons for a full run that first arose during collection.
+The selection denominator includes the collected tests and, under scoped
+collection, the baseline IDs of files it did not collect. The installed pytest
+routes can collect fewer tests because vfy skips unaffected files before collection.
 The reuse summary follows the completed run and counts saved results used to
 reconstruct coverage.
 The coverage report and `--cov-fail-under` check use the reconstructed complete

@@ -275,6 +275,9 @@ def test_repeated_display_ids_keep_full_coverage_without_git(
             "--native-result-json=.vfy/result.json",
         )
         assert result.returncode == stock.returncode == 0, result.stdout + result.stderr
+        assert result.stderr.splitlines().count("Running the full suite") == 1
+        reason = "Note: collected tests have repeated display identities; running the full suite"
+        assert (reason in result.stderr.splitlines()) is repeated
         record = json.loads((tmp_path / ".vfy/result.json").read_text())
         assert [case["nodeid"] for case in record["cases"]] == (
             ["shared.py::same"] * 2

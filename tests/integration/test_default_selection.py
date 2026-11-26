@@ -17,6 +17,7 @@ pytestmark = pytest.mark.skipif(
 _ARGUMENTS = ("--cov=pkg", "--cov-branch", "--cov-report=", "-q")
 _FULL = "Running the full suite"
 _SKIPPED = "`vfy test --all` runs everything"
+_GIT_UNAVAILABLE = "Git state is unavailable; running the full suite"
 
 
 def _project(root: Path) -> VfyProject:
@@ -484,3 +485,66 @@ def test_independent_coverage_run_without_git_head_runs_the_full_suite(
     assert _FULL in result.stderr
     assert "Git state is unavailable" in result.stderr
     assert (tmp_path / ".coverage").is_file()
+
+
+def _terminal_lines(project: VfyProject, *arguments: str) -> list[str]:
+    """Run vfy with both streams merged, as a terminal shows them."""
+
+    command = (
+        "import subprocess, sys; "
+        "raise SystemExit(subprocess.call([sys.executable, '-m', 'vfy', *sys.argv[1:]], "
+        "stderr=subprocess.STDOUT))"
+    )
+    result = project.run_python("-c", command, *arguments)
+    result.expect(0)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _line_index(lines: list[str], text: str) -> int:
+    return next(index for index, line in enumerate(lines) if text in line)
+
+
+@pytest.mark.parametrize(
+    ("options", "arguments"),
+    [((), ()), ((), ("-q",)), ((), ("--all",)), (("--quiet",), ())],
+    ids=["default", "pytest-quiet", "all", "vfy-quiet"],
+)
+def test_status_lines_precede_the_pytest_summary_outside_git(
+    tmp_path: Path, options: tuple[str, ...], arguments: tuple[str, ...]
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pkg/__init__.py", "")
+    project.write("pkg/a.py", "def value():\n    return 1\n")
+    project.write(
+        "tests/test_a.py", "from pkg.a import value\n\ndef test_a():\n    assert value() == 1\n"
+    )
+
+    lines = _terminal_lines(
+        project, *options, "test", "--engine=native", *arguments, "--cov=pkg", "--cov-report="
+    )
+
+    assert "1 passed in " in lines[-1], lines
+    status = [line for line in lines if line in {_FULL, f"Note: {_GIT_UNAVAILABLE}"}]
+    if options:
+        assert status == []
+    elif "--all" in arguments:
+        assert status == [_FULL]
+        assert "Note: the complete suite was requested" in lines
+    else:
+        assert status == [_FULL, f"Note: {_GIT_UNAVAILABLE}"]
+
+
+def test_selected_rerun_reports_its_plan_before_the_pytest_session(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    arguments = ("test", "--engine=native", "--cov=pkg", "--cov-report=")
+    _terminal_lines(project, *arguments)
+    project.write("pkg/a.py", "def value():\n    return 1 + 0\n")
+
+    lines = _terminal_lines(project, *arguments)
+
+    summary = _line_index(lines, "1 passed in ")
+    selected = lines.index("Selected 1 / 2 tests (from the saved baseline; collection follows)")
+    assert selected < _line_index(lines, "test session starts")
+    assert _SKIPPED in lines[:summary]
+    # Reuse is decided from the completed results, after pytest's summary.
+    assert [line.split(";")[0] for line in lines[summary + 1 :]] == ["Reused 1 tests"]

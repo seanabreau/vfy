@@ -91,7 +91,7 @@ def test_body_edit_imports_only_selected_files_and_reconstructs_full_coverage(
         "test_skipped.py::test_skipped",
     ]
     assert _imported(tmp_path) == ["test_first", "test_skipped"]
-    assert "Selected 2 / 3 tests (after collection)" in selected.stderr
+    assert "Selected 2 / 3 tests (from the saved baseline; collection follows)" in selected.stderr
     assert "Reused 1 tests" in selected.stderr
     reconstructed = _evidence(project, tmp_path)
     project.run_vfy(*_ARGUMENTS, "--all").expect(0)
@@ -127,6 +127,8 @@ def test_changed_scoped_collection_repeats_with_complete_collection(tmp_path: Pa
     rerun = project.run_vfy(*_ARGUMENTS).expect(0)
 
     assert "Collecting the complete suite to bind the selection" in rerun.stderr
+    assert "Full suite selected (after collection)" in rerun.stderr
+    assert "Collected tests: 4" in rerun.stderr
     assert "collected test inventory changed; running the full suite" in rerun.stderr
     assert sorted(_executed(tmp_path)) == [
         "test_first.py::test_first[a]",
