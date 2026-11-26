@@ -339,6 +339,18 @@ def _build_test_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _quiet_option(parser: argparse.ArgumentParser) -> None:
+    """Accept Coverage.py's ``-q`` after the commands whose options include it."""
+    # A suppressed default keeps the subcommand from clearing a global ``--quiet``.
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="show only requested output",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser, sub = _base_parser()
     _add_test_parser(sub)
@@ -403,10 +415,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     xml = coverage_sub.add_parser("xml", help="write a Cobertura XML report")
     _report_options(xml)
+    _quiet_option(xml)
     xml.add_argument("-o", "--output", metavar="PATH", help="write the report here or use -")
 
     json_parser = coverage_sub.add_parser("json", help="write a Coverage.py-shaped JSON report")
     _report_options(json_parser)
+    _quiet_option(json_parser)
     json_parser.add_argument(
         "-o", "--output", metavar="PATH", help="write the report here or use -"
     )
@@ -419,10 +433,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     lcov = coverage_sub.add_parser("lcov", help="write an LCOV report")
     _report_options(lcov)
+    _quiet_option(lcov)
     lcov.add_argument("-o", "--output", metavar="PATH", help="write the report here or use -")
 
     html = coverage_sub.add_parser("html", help="write an HTML coverage report")
     _report_options(html)
+    _quiet_option(html)
     html.add_argument("-d", "--directory", metavar="DIR", help="write the HTML site here")
     html.add_argument("--title", metavar="TITLE", help="title of the generated site")
     html.add_argument(
@@ -490,6 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     combine = coverage_sub.add_parser("combine", help="combine parallel coverage data files")
     combine.add_argument("paths", nargs="*", metavar="PATH", help="files or shard directories")
     _data_file(combine)
+    _quiet_option(combine)
     combine.add_argument("--keep", action="store_true", help="keep input shards")
     combine.add_argument(
         "--strict", action="store_true", help="fail when no shards are found (the default)"
@@ -767,7 +784,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if command_index is not None and raw[command_index] == "mutate":
         args = _parse_mutation_arguments(raw, command_index)
     else:
-        args = build_parser().parse_args(raw)
+        parser = build_parser()
+        args = parser.parse_args(raw)
+        if args.quiet and args.verbose:
+            # Global -v and a command's -q are outside one mutually exclusive group.
+            parser.error("argument -q/--quiet: not allowed with argument -v/--verbose")
     if args.command == "test" and args.engine == "native":
         rewritten = _rewrite_serial_xdist_arguments(raw)
         if rewritten is not None:

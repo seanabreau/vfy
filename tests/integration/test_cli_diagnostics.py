@@ -1249,6 +1249,78 @@ def test_quiet_suppresses_confirmations_but_keeps_errors_and_reports(project: Pa
     assert "coverage data file not found" in error.stderr
 
 
+@pytest.mark.parametrize(
+    ("arguments", "output"),
+    [
+        (("report",), None),
+        (("annotate",), None),
+        (("html",), "htmlcov/index.html"),
+        (("json",), "coverage.json"),
+        (("xml",), "coverage.xml"),
+        (("lcov",), "coverage.lcov"),
+        (("combine", ".coverage.shard"), ".coverage"),
+        (("erase",), None),
+        (("debug", "data"), None),
+        (("run", "program.py"), None),
+    ],
+)
+def test_subcommand_quiet_option_matches_coverage_py(
+    tmp_path: Path, arguments: tuple[str, ...], output: str | None
+) -> None:
+    for engine in ("coverage", "vfy"):
+        project = VfyProject(tmp_path / engine)
+        source = project.write("example.py", "value = 1\n")
+        project.write("program.py", "value = 1\n")
+        name = ".coverage.shard" if arguments[0] == "combine" else ".coverage"
+        data = ReferenceData(str(project.root / name))
+        data.add_lines({str(source): {1}})
+        data.write()
+        # Coverage.py accepts the option after the command name, before positionals.
+        command = (arguments[0], "-q", *arguments[1:])
+        result = (
+            project.run_coverage_py(*command)
+            if engine == "coverage"
+            else project.run_vfy("coverage", *command)
+        )
+        if output is not None:
+            result.expect(0)
+            assert (result.stdout, result.stderr) == ("", "")
+            assert (project.root / output).stat().st_size > 0
+            if arguments[0] == "combine":
+                assert not (project.root / name).exists()
+        elif engine == "coverage":
+            result.expect(1)
+            assert "no such option: -q" in result.stderr
+        else:
+            result.expect(2)
+            assert "unrecognized arguments: -q" in result.stderr
+
+
+def test_subcommand_quiet_option_keeps_stdout_payload_and_errors(project: Path) -> None:
+    command = VfyProject(project)
+    normal = command.run_vfy("coverage", "json", "-o", "-")
+    quiet = command.run_vfy("coverage", "json", "--quiet", "-o", "-")
+
+    normal.expect(0)
+    quiet.expect(0)
+    assert quiet.stderr == ""
+    assert json.loads(quiet.stdout)["totals"] == json.loads(normal.stdout)["totals"]
+
+    error = command.run_vfy("coverage", "json", "--quiet", "--data-file", "missing")
+    error.expect(1)
+    assert error.stdout == ""
+    assert "coverage data file not found" in error.stderr
+
+
+def test_subcommand_quiet_option_conflicts_with_verbose(project: Path) -> None:
+    conflict = VfyProject(project).run_vfy("--verbose", "coverage", "json", "--quiet")
+
+    assert conflict.returncode == 2
+    assert conflict.stdout == ""
+    assert "argument -q/--quiet: not allowed with argument -v/--verbose" in conflict.stderr
+    assert not (project / "coverage.json").exists()
+
+
 def test_verbose_keeps_json_clean_and_conflicts_with_quiet(tmp_path: Path) -> None:
     command = VfyProject(tmp_path)
     result = command.run_vfy("--verbose", "--isolated", "config", "show")
