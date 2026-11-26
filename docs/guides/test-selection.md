@@ -164,9 +164,9 @@ vfy prints a `Note:` line with the reason:
 
 `-k`, `-m`, `--deselect`, `--ignore`, `--ignore-glob`, and file targets in the
 pytest configuration's `addopts` define the suite. For example, with
-`addopts = -m "not slow"`, `vfy test --all` records a baseline
-without the slow tests, and later runs select from that suite. A change to `addopts` invalidates
-the baseline.
+`addopts = -m "not slow"`, `vfy test --all` runs the suite without the slow
+tests. An eligible passing run records that suite as the baseline for later
+selection. A change to `addopts` invalidates the baseline.
 
 `--cov-append` runs the full requested suite and appends to existing coverage.
 
@@ -235,9 +235,10 @@ This collects tests and writes the finalized plan without running test bodies
 or replacing saved coverage or history. Portable baseline import and export,
 selection audits, and failure confirmation require `pytest-native` or `pytest`.
 
-Selection can be slower than a full run for cheap tests or broad changes. Compare
-whole-command times with `uv run vfy test --all`; the duration estimates leave out
-collection, baseline checks, and coverage rebuilding.
+Selection can be slower than a full run for cheap tests or broad changes. Add
+`--all` to the same command to measure the full run. The estimates cover test
+execution time. Whole-command timings also include collection, baseline checks,
+and coverage rebuilding.
 
 ## Selection policies
 

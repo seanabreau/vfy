@@ -27,10 +27,9 @@ Diagnostics reports visible configuration, plug-in, and hook conflicts with
 locations and suggested fixes. With `--engine=pytest-native`, it also lists
 which installed plug-ins vfy loads and which it omits; the default engine's
 report lists no plug-ins, so check them with a test run. The static scan can
-include nested `conftest.py` files outside the chosen test path; `--collect`
-checks that path by importing modules and running collection hooks. It does not run test bodies or validate
-fixture behavior and outcomes. A clean diagnostic result is not a compatibility
-guarantee. Pass run options after `--`.
+include nested `conftest.py` files outside the chosen test path. Add `--collect`
+to import modules and run collection hooks for the chosen path. Run the suite
+to check test bodies and fixture behavior. Pass run options after `--`.
 
 ## Compare one suite before you change CI
 
