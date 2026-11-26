@@ -107,6 +107,19 @@ def test_coverage_report_ends_like_coverage_py_when_stdout_closes(tmp_path: Path
     assert (actual.returncode, actual.stdout, actual.stderr) == (1, "", "")
 
 
+def test_coverage_run_reports_a_broken_pipe_from_the_measured_program(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    script = project.write(
+        "program.py", "import errno\nraise BrokenPipeError(errno.EPIPE, 'program pipe closed')\n"
+    )
+
+    result = project.run_vfy("coverage", "run", script.name)
+
+    result.expect(1)
+    assert "program pipe closed" in result.stderr
+    assert project.data().lines(str(script)) == [1, 2]
+
+
 @pytest.mark.parametrize("arguments", [("--help",), ("test", "--engine=native", "--version")])
 def test_buffered_stdout_is_flushed_before_exit(tmp_path: Path, arguments: tuple[str, ...]) -> None:
     project = VfyProject(tmp_path)
