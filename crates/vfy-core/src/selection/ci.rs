@@ -127,7 +127,10 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> Result<String, CoreErro
 /// assertion rewriting does for test modules. Tracked bytecode there is a
 /// cache of other inputs, and importing tests can rewrite it during a run.
 fn source_input(path: &str) -> bool {
-    !(path.ends_with(".pyc") && path.split('/').any(|part| part == "__pycache__"))
+    !(Path::new(path)
+        .extension()
+        .is_some_and(|extension| extension == "pyc")
+        && path.split('/').any(|part| part == "__pycache__"))
 }
 
 fn tracked_files(root: &Path) -> Result<BTreeSet<String>, CoreError> {
