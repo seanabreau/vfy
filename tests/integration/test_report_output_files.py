@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
@@ -127,3 +128,46 @@ def test_data_file_mode_matches_coverage_run(tmp_path: Path, existing: bool, uma
         modes[tool] = stat.S_IMODE(data.stat().st_mode)
 
     assert modes["vfy"] == modes["coverage"] == 0o644 & ~int(umask, 8)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux procfs descriptor paths")
+def test_report_reaches_an_open_regular_file_descriptor(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write("module.py", "VALUE = 1\n")
+    project.run_coverage_py("run", "module.py").expect(0)
+    outputs = {}
+    for tool, args in (("coverage", ()), ("vfy", ("coverage",))):
+        output_directory = tmp_path / tool
+        output_directory.mkdir()
+        result = project.run_python(
+            "-c",
+            """import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1]) / "report"
+with output.open("w+b") as handle:
+    handle.write(b"old" * 10_000)
+    handle.flush()
+    fd = handle.fileno()
+    target = output.with_name("report-link")
+    target.symlink_to(f"/dev/fd/{fd}")
+    subprocess.run(
+        [sys.executable, "-m", *sys.argv[2:], "json", "-q", "-o", str(target)],
+        check=True, pass_fds=(fd,),
+    )
+    handle.seek(0)
+    report = json.load(handle)
+    assert output.stat().st_ino == os.fstat(fd).st_ino
+    assert target.is_symlink()
+    print(json.dumps(report["files"]))
+""",
+            str(output_directory),
+            tool,
+            *args,
+        )
+        result.expect(0)
+        outputs[tool] = json.loads(result.stdout)
+    assert outputs["vfy"] == outputs["coverage"]

@@ -322,8 +322,8 @@ command's default. `-` means stdout. Diagnostics and confirmations go to stderr.
 Report files have the effects of Coverage.py writing them with `open(path, "w")`:
 a symlink is followed and its final target is written, an existing file keeps
 its permissions, and a new file gets `0o666` less the umask. vfy replaces a
-regular file atomically, so a failed write leaves the earlier report. A device
-or FIFO, such as `/dev/stdout`, is written in place.
+regular file atomically, so a failed write leaves the earlier report. Devices,
+FIFOs, and open descriptor paths such as `/dev/stdout` are written in place.
 
 `coverage run` accepts `-a/--append`, `--branch`, `--decisions`,
 `-p/--parallel-mode`, `-m/--module`, repeatable `--source`, `--include`, and

@@ -91,6 +91,39 @@ fn write_through_a_symlink_chain_replaces_the_final_target_and_keeps_its_mode() 
 
 #[cfg(unix)]
 #[test]
+fn rollback_copy_is_prepared_beside_the_symlink_target() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().expect("root");
+    let targets = root.path().join("targets");
+    std::fs::create_dir(&targets).expect("target directory");
+    let target = targets.join("result");
+    std::fs::write(&target, b"prior result").expect("prior result");
+    let link = root.path().join("report");
+    symlink(&target, &link).expect("report link");
+
+    let (destination, mode) = publication_target(&link).expect("regular target");
+    let file = prepare_publication(destination, mode, |output| output.write_all(b"new"))
+        .expect("prepare replacement and backup");
+    let previous = file.previous.expect("backup");
+    assert_eq!(previous.path().parent(), file.destination.parent());
+    file.replacement
+        .persist(&file.destination)
+        .expect("publish");
+    restore(vec![PublishedFile {
+        destination: file.destination,
+        previous: Some(previous),
+    }])
+    .expect("roll back");
+    assert!(link.is_symlink());
+    assert_eq!(
+        std::fs::read(&link).expect("restored result"),
+        b"prior result"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn dangling_symlink_creates_its_target_only_in_an_existing_directory() {
     use std::os::unix::fs::symlink;
 

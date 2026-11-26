@@ -1,9 +1,9 @@
 //! Preflight all artifacts, publish atomically per file, and restore on failure.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::output::{PreparedFile, PublishedFile, prepare, prepare_replacement, restore};
+use crate::output::{PublishedFile, prepare_publication, publication_target, restore};
 
 use super::{RunCurrency, RunOutcome, WatchSession};
 
@@ -32,7 +32,7 @@ fn expand(
             )?;
         }
     } else if metadata.is_file() {
-        let destination = crate::absolute_path(destination);
+        let destination = destination.to_path_buf();
         if files
             .insert(destination.clone(), source.to_path_buf())
             .is_some()
@@ -104,22 +104,23 @@ impl WatchSession {
             }
         }
         let mut prepared = Vec::with_capacity(files.len());
+        let mut resolved = BTreeSet::new();
         for (destination, source) in files {
             let parent = destination
                 .parent()
                 .ok_or_else(|| io::Error::other("output requires a parent directory"))?;
             std::fs::create_dir_all(parent)?;
-            let (destination, replacement) = prepare_replacement(&source, &destination)?;
-            let previous = match prepare(&destination, parent) {
-                Ok(previous) => Some(previous),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error),
-            };
-            prepared.push(PreparedFile {
-                destination,
-                replacement,
-                previous,
-            });
+            let (destination, mode) = publication_target(&destination)?;
+            if destination.starts_with(&stage) || !resolved.insert(destination.clone()) {
+                return Err(io::Error::other(format!(
+                    "conflicting publication destination: {}",
+                    destination.display()
+                )));
+            }
+            prepared.push(prepare_publication(destination, mode, |output| {
+                io::copy(&mut std::fs::File::open(&source)?, output)?;
+                Ok(())
+            })?);
         }
         if !self.is_current()? {
             return Ok(false);

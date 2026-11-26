@@ -76,19 +76,13 @@ pub(crate) fn atomic_write_with<E>(
         OutputTarget::Stream => {
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
+                .truncate(true)
                 .open(path)
                 .map_err(&io_error)?;
             write(&mut file)
         }
         OutputTarget::File { path, mode } => {
-            if mode.is_some() {
-                // A rename would bypass the file's own permissions; report the
-                // error, such as EACCES, that opening it for writing gives.
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .open(&path)
-                    .map_err(&io_error)?;
-            }
+            check_writable(&path, mode).map_err(&io_error)?;
             let mut temporary = replacement_file(&path, mode, NEW_FILE_MODE).map_err(&io_error)?;
             write(temporary.as_file_mut())?;
             temporary
@@ -118,42 +112,42 @@ pub(crate) enum OutputTarget {
 /// # Errors
 /// Returns an error when a link cannot be read or forms a cycle.
 pub(crate) fn output_target(path: &Path) -> io::Result<OutputTarget> {
-    match std::fs::metadata(path) {
-        Ok(metadata) if metadata.is_file() => Ok(OutputTarget::File {
-            path: std::fs::canonicalize(path)?,
-            mode: Some(permission_bits(&metadata)),
-        }),
-        // Renaming over a directory fails with the error `open()` would give.
-        Ok(metadata) if metadata.is_dir() => Ok(OutputTarget::File {
-            path: path.to_path_buf(),
-            mode: None,
-        }),
-        Ok(_) => Ok(OutputTarget::Stream),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(OutputTarget::File {
-            path: dangling_target(path)?,
-            mode: None,
-        }),
-        Err(error) => Err(error),
-    }
-}
-
-/// Follow a chain of links that ends at a missing path, as `open()` with
-/// `O_CREAT` does. The target's directory must already exist.
-fn dangling_target(path: &Path) -> io::Result<PathBuf> {
-    // Linux and macOS both stop following links after 40 hops.
     const MAX_LINKS: usize = 40;
     let mut current = path.to_path_buf();
-    for _ in 0..MAX_LINKS {
+    for depth in 0..=MAX_LINKS {
+        if descriptor_path(&current) {
+            return Ok(OutputTarget::Stream);
+        }
         match std::fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
+            Ok(metadata) if metadata.is_symlink() => {
+                if depth == MAX_LINKS {
+                    break;
+                }
                 let target = std::fs::read_link(&current)?;
                 current = match current.parent() {
                     Some(parent) if target.is_relative() => parent.join(target),
                     _ => target,
                 };
             }
-            Ok(_) => return Ok(current),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(current),
+            Ok(metadata) if metadata.is_file() => {
+                return Ok(OutputTarget::File {
+                    path: crate::path::canonical_path(&current)?,
+                    mode: Some(permission_bits(&metadata)),
+                });
+            }
+            Ok(metadata) if metadata.is_dir() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::IsADirectory,
+                    "Is a directory",
+                ));
+            }
+            Ok(_) => return Ok(OutputTarget::Stream),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(OutputTarget::File {
+                    path: crate::absolute_path(&current),
+                    mode: None,
+                });
+            }
             Err(error) => return Err(error),
         }
     }
@@ -161,6 +155,34 @@ fn dangling_target(path: &Path) -> io::Result<PathBuf> {
         "too many levels of symbolic links: {}",
         path.display()
     )))
+}
+
+// A procfs descriptor can refer to a regular file. Renaming its pathname
+// would leave the already-open descriptor pointing at the original bytes.
+#[cfg(target_os = "linux")]
+fn descriptor_path(path: &Path) -> bool {
+    if !path
+        .file_name()
+        .is_some_and(|name| name.as_encoded_bytes().iter().all(u8::is_ascii_digit))
+    {
+        return false;
+    }
+    path.parent()
+        .and_then(|parent| parent.canonicalize().ok())
+        .is_some_and(|parent| parent.starts_with("/proc") && parent.ends_with("fd"))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn descriptor_path(_path: &Path) -> bool {
+    false
+}
+
+fn check_writable(path: &Path, mode: Option<u32>) -> io::Result<()> {
+    if mode.is_some() {
+        // A rename would otherwise bypass the destination file's permissions.
+        std::fs::OpenOptions::new().write(true).open(path)?;
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -305,30 +327,36 @@ pub(crate) fn prepare(source: &Path, parent: &Path) -> io::Result<NamedTempFile>
     Ok(temporary)
 }
 
-/// Copy staged `source` into a replacement for the file `destination` names.
-///
-/// Returns the resolved destination, as [`output_target`] finds it, and a
-/// temporary file in its directory with the mode [`atomic_write`] would give.
-///
-/// # Errors
-/// Returns an error when the destination is not a regular file or the copy fails.
-pub(crate) fn prepare_replacement(
-    source: &Path,
-    destination: &Path,
-) -> io::Result<(PathBuf, NamedTempFile)> {
+/// Resolve a target that can be published and rolled back with a rename.
+pub(crate) fn publication_target(destination: &Path) -> io::Result<(PathBuf, Option<u32>)> {
     let OutputTarget::File { path, mode } = output_target(destination)? else {
         return Err(io::Error::other(format!(
             "files published together can only replace regular files: {}",
             destination.display()
         )));
     };
+    Ok((path, mode))
+}
+
+/// Stage replacement bytes and the original file beside the resolved target.
+pub(crate) fn prepare_publication(
+    path: PathBuf,
+    mode: Option<u32>,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+) -> io::Result<PreparedFile> {
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("output requires a parent directory"))?;
+    check_writable(&path, mode)?;
+    let previous = mode.map(|_| prepare(&path, parent)).transpose()?;
     // Watch ignores this suffix, so staging cannot make its own run obsolete.
     let mut temporary = temporary_in(parent, mode, NEW_FILE_MODE, ".vfy-watch")?;
-    io::copy(&mut std::fs::File::open(source)?, &mut temporary)?;
-    Ok((path, temporary))
+    write(temporary.as_file_mut())?;
+    Ok(PreparedFile {
+        destination: path,
+        replacement: temporary,
+        previous,
+    })
 }
 
 pub(crate) fn restore(files: Vec<PublishedFile>) -> io::Result<()> {
