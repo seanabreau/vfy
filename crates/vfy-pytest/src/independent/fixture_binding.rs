@@ -69,8 +69,19 @@ impl NativeFixtureOutcome {
     }
 }
 
+/// The values pytest's `FixtureDef` exposes for a definition, fixed at collection.
+pub(super) struct FixtureDefinitionAttributes {
+    pub(super) argnames: Py<PyTuple>,
+    pub(super) baseid: String,
+    pub(super) params: Py<PyAny>,
+    pub(super) ids: Py<PyAny>,
+}
+
 struct BindingObjects {
     callable: Py<PyAny>,
+    argnames: Py<PyTuple>,
+    params: Py<PyAny>,
+    ids: Py<PyAny>,
     finalizers: Py<PyList>,
     outcome: FixtureOutcome,
     outcome_generation: u64,
@@ -80,6 +91,7 @@ struct BindingObjects {
 pub(crate) struct NativeFixtureBinding {
     id: FixtureId,
     argname: String,
+    baseid: String,
     declared_scope: FixtureScope,
     objects: Mutex<Option<BindingObjects>>,
 }
@@ -91,15 +103,26 @@ impl NativeFixtureBinding {
         argname: String,
         declared_scope: FixtureScope,
         callable: Py<PyAny>,
+        definition: FixtureDefinitionAttributes,
     ) -> PyResult<Py<Self>> {
+        let FixtureDefinitionAttributes {
+            argnames,
+            baseid,
+            params,
+            ids,
+        } = definition;
         Py::new(
             py,
             Self {
                 id,
                 argname,
+                baseid,
                 declared_scope,
                 objects: Mutex::new(Some(BindingObjects {
                     callable,
+                    argnames,
+                    params,
+                    ids,
                     finalizers: PyList::empty(py).unbind(),
                     outcome: FixtureOutcome::Empty,
                     outcome_generation: 0,
@@ -118,6 +141,11 @@ impl NativeFixtureBinding {
 
     pub(super) fn callable(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.object(|objects| objects.callable.clone_ref(py))
+    }
+
+    /// The explicit parameter IDs, or `None` when the definition declares none.
+    pub(super) fn parameter_ids(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        self.object(|objects| (!objects.ids.is_none(py)).then(|| objects.ids.clone_ref(py)))
     }
 
     pub(super) fn finalizers(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
@@ -265,6 +293,35 @@ impl NativeFixtureBinding {
     }
 
     #[getter]
+    fn argnames(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.object(|objects| objects.argnames.clone_ref(py))
+    }
+
+    #[getter]
+    fn baseid(&self) -> &str {
+        &self.baseid
+    }
+
+    #[getter]
+    fn params(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.object(|objects| objects.params.clone_ref(py))
+    }
+
+    #[getter]
+    fn ids(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.object(|objects| objects.ids.clone_ref(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "<FixtureDef argname={} scope={} baseid={}>",
+            PyString::new(py, &self.argname).repr()?,
+            super::scope_text(py, self.declared_scope).repr()?,
+            PyString::new(py, &self.baseid).repr()?,
+        ))
+    }
+
+    #[getter]
     fn scope<'py>(&self, py: Python<'py>) -> Bound<'py, PyString> {
         super::scope_text(py, self.declared_scope)
     }
@@ -299,6 +356,9 @@ impl NativeFixtureBinding {
             && let Some(objects) = objects.as_ref()
         {
             visit.call(&objects.callable)?;
+            visit.call(&objects.argnames)?;
+            visit.call(&objects.params)?;
+            visit.call(&objects.ids)?;
             visit.call(&objects.finalizers)?;
             match &objects.outcome {
                 FixtureOutcome::Empty => (),

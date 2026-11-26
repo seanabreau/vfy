@@ -507,3 +507,128 @@ def test_value(subject):
     )
     result = project.run_engine(engine, "-q")
     result.expect(0)
+
+
+_DEFINITION_RECORDER = """import json
+import pytest
+from pathlib import Path
+
+pytest_plugins = ['provider']
+records = []
+
+def describe(fixturedef):
+    func = fixturedef.func
+    ids = fixturedef.ids
+    return {
+        'argname': fixturedef.argname,
+        'argnames': [type(fixturedef.argnames).__name__, list(fixturedef.argnames)],
+        'baseid': fixturedef.baseid,
+        'scope': fixturedef.scope,
+        'params': repr(fixturedef.params),
+        'ids': ids.__name__ if callable(ids) else repr(ids),
+        # Each engine supplies its own direct-parametrization function.
+        'func': None if fixturedef.argname == 'direct' else [func.__module__, func.__qualname__],
+        'repr': repr(fixturedef),
+        'unittest': hasattr(fixturedef, 'unittest'),
+    }
+
+def describe_cache(cache):
+    if cache is None:
+        return None
+    error = None if cache[2] is None else [type(item).__name__ for item in cache[2]]
+    return [type(cache).__name__, len(cache), repr(cache[0]), repr(cache[1]), error]
+
+@pytest.hookimpl(wrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    record = describe(fixturedef)
+    record['before'] = describe_cache(fixturedef.cached_result)
+    try:
+        return (yield)
+    finally:
+        record['after'] = describe_cache(fixturedef.cached_result)
+        records.append(record)
+
+def pytest_sessionfinish():
+    Path('definitions.json').write_text(json.dumps(records, indent=1))
+
+@pytest.fixture(scope='module')
+def root_value(unused=1):
+    return 'root'
+"""
+_DEFINITION_PROVIDER = """import pytest
+
+@pytest.fixture(scope='session')
+def plugin_value(request):
+    return 'plugin'
+"""
+_DEFINITION_LOCAL = """import pytest
+
+def name_id(value):
+    return f'n{value}'
+
+@pytest.fixture(params=[1, 2], ids=name_id)
+def local_value(request, plugin_value):
+    return request.param
+
+@pytest.fixture(name='renamed', scope='class', params=['a'], ids=['first'])
+def renamed_implementation(root_value):
+    return root_value
+"""
+_DEFINITION_TESTS = """import pytest
+
+@pytest.fixture
+def module_value(request, root_value, local_value):
+    return (root_value, local_value)
+
+@pytest.fixture
+def failing():
+    raise ValueError('setup failure')
+
+class TestDefinitions:
+    @pytest.fixture(scope='class')
+    def class_value(self, renamed):
+        return renamed
+
+    @pytest.mark.parametrize('direct', [7])
+    def test_values(self, module_value, class_value, direct):
+        assert class_value == 'root'
+
+def test_failing(failing):
+    pass
+"""
+
+
+def test_fixture_setup_hooks_read_pytest_fixture_definition_attributes(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pytest.ini", "[pytest]\n")
+    project.write("conftest.py", _DEFINITION_RECORDER)
+    project.write("provider.py", _DEFINITION_PROVIDER)
+    project.write("sub/conftest.py", _DEFINITION_LOCAL)
+    project.write("sub/test_definitions.py", _DEFINITION_TESTS)
+    observation = tmp_path / "definitions.json"
+    declared = {
+        "plugin_value",
+        "root_value",
+        "local_value",
+        "renamed",
+        "module_value",
+        "class_value",
+        "direct",
+        "failing",
+    }
+
+    def records() -> list[str]:
+        # Installed plug-ins can add their own fixtures; compare the declared ones.
+        observed = json.loads(observation.read_text())
+        observation.unlink()
+        return sorted(
+            json.dumps(record, sort_keys=True)
+            for record in observed
+            if record["argname"] in declared
+        )
+
+    project.run_engine("stock", "-q").expect(1)
+    expected = records()
+    assert {json.loads(record)["argname"] for record in expected} == declared
+    project.run_engine("native", "-q").expect(1)
+    assert records() == expected
