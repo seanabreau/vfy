@@ -403,6 +403,55 @@ def test_pytest_no_cover_fixture_disables_the_call_phase(tmp_path: Path) -> None
     assert read_lines(tmp_path / ".coverage", product) == [1]
 
 
+@pytest.mark.parametrize("activation", ["pytest", "coverage-run"])
+def test_pytest_measures_custom_items_like_pytest_cov(tmp_path: Path, activation: str) -> None:
+    project = VfyProject(tmp_path)
+    product = write_project(tmp_path)
+    (tmp_path / "test_product.py").unlink()
+    project.write(
+        "conftest.py",
+        "import pytest\n"
+        "import product\n\n"
+        "class DataItem(pytest.Item):\n"
+        "    def runtest(self):\n"
+        "        assert getattr(product, self.name)() in {0, 42}\n\n"
+        "class DataFile(pytest.File):\n"
+        "    def collect(self):\n"
+        "        yield DataItem.from_parent(self, name='covered')\n"
+        "        excluded = DataItem.from_parent(self, name='missed')\n"
+        "        excluded.add_marker(pytest.mark.no_cover)\n"
+        "        yield excluded\n\n"
+        "def pytest_collect_file(file_path, parent):\n"
+        "    if file_path.suffix == '.dat':\n"
+        "        return DataFile.from_parent(parent, path=file_path)\n",
+    )
+    project.write("cases.dat", "")
+    actual_env = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+    oracle_env = {**actual_env, "COVERAGE_FILE": str(tmp_path / ".coverage.oracle")}
+    if activation == "pytest":
+        arguments = ["--cov=product", "--cov-report=", "-q"]
+        actual = project.run_pytest(
+            "-p", "vfy.pytest_plugin", *arguments, load_xdist=False, env=actual_env
+        )
+        expected = project.run_pytest(
+            "-p", "pytest_cov.plugin", *arguments, load_xdist=False, env=oracle_env
+        )
+        measured_lines = [1, 2, 4]
+    else:
+        arguments = ["run", "--source=product", "-m", "pytest", "-q", "-p"]
+        actual = project.run_vfy("coverage", *arguments, "vfy.pytest_plugin", env=actual_env)
+        expected = project.run_coverage_py(*arguments, "pytest_cov.plugin", env=oracle_env)
+        # The enclosing CLI collector measures both items without pytest --cov.
+        measured_lines = [1, 2, 4, 5]
+
+    actual.expect(0)
+    expected.expect(0)
+    assert "2 passed" in actual.stdout
+    assert "2 passed" in expected.stdout
+    assert read_lines(tmp_path / ".coverage", product) == measured_lines
+    assert read_lines(tmp_path / ".coverage.oracle", product) == measured_lines
+
+
 def test_pytest_no_cov_and_no_cov_on_fail(tmp_path: Path) -> None:
     write_project(tmp_path)
     test_file = tmp_path / "test_product.py"
