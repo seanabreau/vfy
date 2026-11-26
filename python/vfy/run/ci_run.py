@@ -83,6 +83,24 @@ def _run_pytest(
     return invocation.controller.run(pytest_args, environment, stdout="inherit")
 
 
+def _report_planned_selection(args: argparse.Namespace, planned: SelectionPlan) -> None:
+    """Report the plan before pytest's session output, which ends with its summary."""
+    if not args.plan_only:
+        _controller_message(args, _selection_message(planned))
+
+
+def _report_bound_selection(
+    args: argparse.Namespace, planned: SelectionPlan, bound: SelectionPlan
+) -> None:
+    """Report the plan bound after collection when the run has not already shown it."""
+    if planned.fallback_full or bound.fallback_full:
+        changed = planned.fallback_full != bound.fallback_full
+    else:
+        changed = set(planned.selected) != set(bound.selected)
+    if args.plan_only or changed:
+        _controller_message(args, _selection_message(bound, collected=True))
+
+
 def _run_ci_test_once(
     args: argparse.Namespace,
     config: Config,
@@ -145,14 +163,16 @@ def _run_ci_test_once(
         else:
             environment["VFY_TEST_HISTORY"] = invocation.history_path
             evidence = _capture_green_source_identity(args, config, invocation, evidence)
+        _report_planned_selection(args, plan)
         started = _profile_begin()
         completed = _run_pytest(args, invocation, pytest_args, environment, stage)
         _profile_end("pytest", started)
         if not final_path.is_file():
             _publish_ci_diagnostics(args, request_path, result_path, completed, finalized=False)
             return int(completed)
-        plan = SelectionPlan.from_rust(read_ci_plan(str(final_path)))
-        _controller_message(args, _selection_message(plan, collected=True))
+        bound = SelectionPlan.from_rust(read_ci_plan(str(final_path)))
+        _report_bound_selection(args, plan, bound)
+        plan = bound
         if completed == 5 and plan.all_tests and not plan.selected and not args.audit_selection:
             completed = 0
         if args.plan_only:

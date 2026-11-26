@@ -91,7 +91,7 @@ def test_body_edit_imports_only_selected_files_and_reconstructs_full_coverage(
         "test_skipped.py::test_skipped",
     ]
     assert _imported(tmp_path) == ["test_first", "test_skipped"]
-    assert "Selected 2 / 3 tests (after collection)" in selected.stderr
+    assert "Selected 2 / 3 tests (from the saved baseline; collection follows)" in selected.stderr
     assert "Reused 1 tests" in selected.stderr
     reconstructed = _evidence(project, tmp_path)
     project.run_vfy(*_ARGUMENTS, "--all").expect(0)

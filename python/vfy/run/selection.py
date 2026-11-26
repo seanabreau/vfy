@@ -83,8 +83,11 @@ def _select_test_plan(
         )
     elif args.mode == "full":
         plan = _full_test_plan(_complete_run_reason(force_full=force_full), mode="full")
-    elif not git_available:
+    elif not git_available and not args.fresh:
         plan = _full_test_plan("Git state is unavailable; running the full suite")
+    elif not git_available:
+        # --all runs the full suite whether or not Git can describe the changes.
+        plan = _full_test_plan(_complete_run_reason(force_full=force_full))
     elif replay_enabled:
         plan = _full_test_plan(evidence.baseline_reason or "a fresh baseline was requested")
     else:

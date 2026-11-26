@@ -75,7 +75,7 @@ vfy prints a summary on stderr. The numbers and paths are illustrative:
 ```text
 Changed code: /path/to/vfy-coverage-example/src/bounds.py
 Affected code: 1 functions, 0 branches
-Selected 1 / 2 tests (after collection)
+Selected 1 / 2 tests (from the saved baseline; collection follows)
 Tests outside the selection were skipped; `vfy test --all` runs everything
 Estimated selected suite: 0.00s
 Estimated full suite: 0.00s
