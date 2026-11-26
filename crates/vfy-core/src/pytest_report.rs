@@ -480,7 +480,7 @@ fn resolve_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<Vec<Output<'_>>, Co
             Err(error) => return Err(artifact_error(path, "inspect pytest HTML output", error)),
         };
         let destination = if metadata.as_ref().is_some_and(std::fs::Metadata::is_symlink) {
-            path.to_path_buf()
+            path.clone()
         } else {
             parent.join(path.file_name().ok_or_else(|| {
                 CoreError::InvalidInput("pytest HTML output requires a filename".to_owned())
