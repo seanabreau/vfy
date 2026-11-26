@@ -8,10 +8,21 @@ import signal
 import sys
 
 from ._cli_arguments import escape_arguments
+from ._closed_stdout import discard_stdout, flush_stdout_before_exit
 from .native import is_test_cli
 
 
 def main() -> int:
+    try:
+        with flush_stdout_before_exit():
+            return _main()
+    except BrokenPipeError:
+        # Match pytest's quiet exit when stdout closes early.
+        discard_stdout()
+        return 1
+
+
+def _main() -> int:
     os.environ["VFY_IN_PROCESS_PYTEST"] = "1"
     # pytest-xdist reports the user's command as workerinput["mainargv"].
     os.environ["VFY_NATIVE_MAINARGV"] = json.dumps(sys.argv)
