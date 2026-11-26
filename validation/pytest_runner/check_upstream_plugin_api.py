@@ -504,7 +504,7 @@ def check_conftest_session_lifecycle(
     return observations
 
 
-def check_mixed_conftest_rejection(
+def check_mixed_conftest_lifecycle(
     destination: Path,
     stock_python: Path,
     candidate_python: Path,
@@ -516,6 +516,7 @@ def check_mixed_conftest_rejection(
         project.write("conftest.py", MIXED_CONFTEST)
         project.write("test_case.py", "def test_runs():\n    pass\n")
         event_path = destination / f"mixed-conftest-lifecycle-{engine}-event.txt"
+        event_path.unlink(missing_ok=True)
         command = [
             str(python.absolute()),
             "-m",
@@ -538,35 +539,16 @@ def check_mixed_conftest_rejection(
                 "PYTEST_PLUGIN_API_CONFTEST_EVENT": str(event_path),
             },
         )
-        if engine == "stock":
-            if (
-                result.returncode != 0
-                or "1 passed" not in result.stdout
-                or not event_path.is_file()
-                or event_path.read_text(encoding="utf-8").splitlines()
-                != ["configure", "runtime", "unconfigure"]
-            ):
-                raise RuntimeError(
-                    f"stock mixed conftest control did not run all hooks:\n"
-                    f"{result.stdout}\n{result.stderr}"
-                )
-            observations[engine] = {"returncode": result.returncode, "runtime_hook_ran": True}
-            continue
+        events = event_path.read_text(encoding="utf-8").splitlines() if event_path.is_file() else []
         if (
-            result.returncode != 4
-            or "pytest_runtest_setup" not in result.stderr
-            or event_path.exists()
+            result.returncode != 0
+            or "1 passed" not in result.stdout
+            or events != ["configure", "runtime", "unconfigure"]
         ):
             raise RuntimeError(
-                "candidate did not reject the mixed conftest before its accepted lifecycle "
-                f"hooks ran:\n{result.stdout}\n{result.stderr}"
+                f"{engine} mixed conftest ran {events!r}:\n{result.stdout}\n{result.stderr}"
             )
-        observations[engine] = {
-            "returncode": result.returncode,
-            "rejected_hook": "pytest_runtest_setup",
-            "configure_or_unconfigure_ran": False,
-            "test_executed": False,
-        }
+        observations[engine] = {"returncode": result.returncode, "hooks": events}
     return observations
 
 
@@ -831,7 +813,7 @@ def main() -> None:
         args.stock_python,
         args.candidate_python,
     )
-    mixed_conftest_observations = check_mixed_conftest_rejection(
+    mixed_conftest_observations = check_mixed_conftest_lifecycle(
         destination, args.stock_python, args.candidate_python
     )
     hook_tracing_observations = check_hook_tracing(

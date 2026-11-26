@@ -75,6 +75,8 @@ def verify(vfy_wheel: Path, pytest_wheel: Path, python: Path, output: Path) -> N
                 "export",
                 "--locked",
                 "--no-dev",
+                "--group",
+                "pytest-corpus",
                 "--no-emit-project",
                 "--format",
                 "requirements-txt",
