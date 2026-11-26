@@ -128,14 +128,17 @@ jobs:
           sccache: "true"
           command: build
           args: --release --locked --out dist
+      - name: Smoke test the wheel in an empty environment
+        run: |
+          uv venv --python 3.12 target/wheel-smoke
+          uv pip install --python target/wheel-smoke/bin/python --no-deps dist/vfy-*.whl
+          target/wheel-smoke/bin/python scripts/smoke_wheel.py
       - name: Install the locked test dependencies and the built wheel
         run: |
           uv sync --locked --group dev --group benchmark --no-install-project --python 3.12
           uv pip install --reinstall --no-deps dist/vfy-*.whl
-      - name: Verify the installed wheel
-        run: |
-          uv run --no-sync python scripts/smoke_wheel.py
-          uv run --no-sync python scripts/check_wheel_typing.py
+      - name: Verify installed native typing declarations
+        run: uv run --no-sync python scripts/check_wheel_typing.py
       - name: Run the complete Python suite
         run: uv run --no-sync pytest -n auto
 
