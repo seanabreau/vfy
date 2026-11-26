@@ -327,13 +327,16 @@ command's default. `-` means stdout. Diagnostics and confirmations go to stderr.
 | Command | Options in addition to `--data-file` and `--rcfile` |
 | --- | --- |
 | `report` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-m/--show-missing`, `--skip-covered/--no-skip-covered`, `--skip-empty/--no-skip-empty`, `--sort=COLUMN`, `--format text / markdown / total` |
-| `json` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-o/--output`, `--pretty-print`, `--show-contexts` |
-| `xml`, `lcov` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-o/--output` |
-| `html` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-d/--directory`, `--title`, `--skip-covered/--no-skip-covered`, `--skip-empty/--no-skip-empty` |
+| `json` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-o/--output`, `--pretty-print`, `--show-contexts`, `-q/--quiet` |
+| `xml`, `lcov` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-o/--output`, `-q/--quiet` |
+| `html` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-d/--directory`, `--title`, `--skip-covered/--no-skip-covered`, `--skip-empty/--no-skip-empty`, `-q/--quiet` |
 | `annotate` | `--include`, `--omit`, `--contexts`, `--precision`, `--ignore-errors`, `-d/--directory` |
 | `combine` | `--keep`, `--strict`, and optional shard files or directories |
 | `erase` | `--parallel` to also remove discovered shards |
 | `debug data` | No additional options. Prints `path`, `schema` (always `7`), `has_arcs`, `files` (the file count), and the line count of each measured file. |
+
+As in Coverage.py, `-q/--quiet` after `html`, `json`, `xml`, `lcov`, or `combine`
+has the same effect as the global `--quiet`.
 
 Report commands load saved coverage by combining discovered shards into the
 selected data file and removing consumed shards after successful replacement.
