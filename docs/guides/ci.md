@@ -54,10 +54,11 @@ fails or total coverage is below `--cov-fail-under`, and writes the reports in
 both cases. The upload step runs with `if: always()` and warns if no file
 exists, for example after a usage error stops the run before collection.
 
-Don't restore `.vfy/` from `actions/cache` between runs. `--all` replaces the
-saved baseline without reading it. Without `--all`, a `--engine=pytest-native`
-run on a commit that matches a restored baseline, such as a rerun of the same
-workflow, reuses the saved coverage without running tests.
+Leave `.vfy/` out of the CI cache. `--all` runs every test in the requested
+scope, even when a saved baseline exists. Without `--all`, a
+`--engine=pytest-native` run can reuse the coverage from a matching baseline
+without running tests. This can happen when CI reruns a workflow on the same
+commit.
 
 ## Run pytest with vfy coverage
 
