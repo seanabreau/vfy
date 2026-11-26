@@ -296,7 +296,12 @@ fn bytecode_caches_are_not_source_inputs() {
         assert!(!source_input(path), "{path}");
     }
     // A bytecode file outside `__pycache__` can be imported without source.
-    for path in ["pkg/module.pyc", "pkg/pycache/data.bin", "__pycache__.py"] {
+    for path in [
+        "pkg/module.pyc",
+        "pkg/pycache/data.bin",
+        "pkg/__pycache__/fixture.txt",
+        "__pycache__.py",
+    ] {
         assert!(source_input(path), "{path}");
     }
 }

@@ -127,23 +127,28 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> Result<String, CoreErro
 /// assertion rewriting does for test modules. Tracked bytecode there is a
 /// cache of other inputs, and importing tests can rewrite it during a run.
 fn source_input(path: &str) -> bool {
-    !path.split('/').any(|part| part == "__pycache__")
+    !(path.ends_with(".pyc") && path.split('/').any(|part| part == "__pycache__"))
 }
 
 fn tracked_files(root: &Path) -> Result<BTreeSet<String>, CoreError> {
     let bytes = git(root, &["ls-files", "-z"])?;
-    let mut files: BTreeSet<String> = bytes
+    let files: BTreeSet<String> = bytes
         .split(|byte| *byte == 0)
         .filter(|part| !part.is_empty())
         .map(|part| String::from_utf8(part.to_vec()).map_err(invalid))
         .collect::<Result<_, _>>()?;
-    files.retain(|path| source_input(path));
     if files.len() > MAX_RECORDS {
         return Err(invalid("too many tracked files"));
     }
     for path in &files {
         checked_relative(path)?;
     }
+    Ok(files)
+}
+
+fn source_inputs(root: &Path) -> Result<BTreeSet<String>, CoreError> {
+    let mut files = tracked_files(root)?;
+    files.retain(|path| source_input(path));
     Ok(files)
 }
 
@@ -205,7 +210,7 @@ pub struct BaselineExport<'a> {
 }
 
 fn export_digests(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
-    let tracked = tracked_files(root)?;
+    let tracked = source_inputs(root)?;
     let mut source_digests = BTreeMap::new();
     for path in &tracked {
         if root
@@ -463,7 +468,7 @@ fn eligible_changes(
             "baseline commit is unavailable or is not an ancestor of HEAD".to_owned(),
         ));
     }
-    let tracked = tracked_files(root)?;
+    let tracked = source_inputs(root)?;
     if tracked != bundle.source_digests.keys().cloned().collect()
         || state.untracked
         || state.deleted
@@ -736,7 +741,7 @@ pub fn write_plan_request(request: PlanRequest<'_>) -> Result<(), CoreError> {
     {
         request.source_identity
     } else if let Ok(root) = repository_root() {
-        let files = tracked_files(&root)?
+        let files = source_inputs(&root)?
             .into_iter()
             .map(|path| (path, String::new()))
             .collect();
@@ -930,7 +935,7 @@ pub fn plan_source_current(path: &Path, ignored: &[String]) -> Result<bool, Core
         return Ok(true);
     }
     let root = repository_root()?;
-    let files = tracked_files(&root)?
+    let files = source_inputs(&root)?
         .into_iter()
         .map(|path| (path, String::new()))
         .collect();

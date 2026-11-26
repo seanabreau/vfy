@@ -505,3 +505,19 @@ def test_bytecode_rewritten_during_collection_is_not_a_source_change(tmp_path: P
     assert "2 passed" in rerun.stdout
     rewritten = project.run("git", "diff", "--name-only", "--", "*.pyc").expect(0).stdout
     assert "-vfy-" in rewritten, "the run must rewrite vfy's tracked bytecode"
+
+
+def test_ci_plan_cannot_overwrite_tracked_bytecode(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    cache = "pkg/__pycache__/tracked.pyc"
+    project.write(cache, "tracked file\n")
+    project.run("git", "add", "--force", cache).expect(0)
+    project.git_commit("Track a bytecode file")
+
+    result = project.run_vfy(
+        "test", "--engine=native", "--all", "--plan-output", cache, *_ARGUMENTS
+    )
+
+    result.expect(4)
+    assert "CI outputs cannot replace tracked source files" in result.stderr
+    assert (tmp_path / cache).read_text() == "tracked file\n"
