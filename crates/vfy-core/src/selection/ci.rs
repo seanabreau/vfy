@@ -236,6 +236,27 @@ fn export_digests(
     Ok(source_digests)
 }
 
+fn validate_export_source(
+    root: &Path,
+    index: &BTreeMap<String, IndexEntry>,
+    digests: &BTreeMap<String, String>,
+) -> Result<(), CoreError> {
+    let current = tracked_files(root)?;
+    if &current != index || submodule_change(root, &current).map_err(invalid)?.is_some() {
+        return Err(invalid("source changed during baseline export"));
+    }
+    for (path, entry) in &current {
+        if tracked_digest(root, path, entry)? != digests[path] {
+            return Err(invalid("source changed during baseline export"));
+        }
+    }
+    let current = read_git_replay_state(request.ignored).map_err(invalid)?;
+    if current.head != state.head || !current.changed.is_empty() {
+        return Err(invalid("checkout changed during baseline export"));
+    }
+    Ok(())
+}
+
 /// Export a passing full run from a clean checkout into one baseline artifact.
 ///
 /// # Errors
@@ -329,24 +350,7 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
         coverage_digest,
     };
     bundle.import_graph.validate(&tracked)?;
-    // Source may change while the bundle is assembled.
-    let current = tracked_files(&root)?;
-    if current != index
-        || submodule_change(&root, &current)
-            .map_err(invalid)?
-            .is_some()
-    {
-        return Err(invalid("source changed during baseline export"));
-    }
-    for (path, entry) in &current {
-        if tracked_digest(&root, path, entry)? != bundle.source_digests[path] {
-            return Err(invalid("source changed during baseline export"));
-        }
-    }
-    let current = read_git_replay_state(request.ignored).map_err(invalid)?;
-    if current.head != state.head || !current.changed.is_empty() {
-        return Err(invalid("checkout changed during baseline export"));
-    }
+    validate_export_source(&root, &index, &bundle.source_digests)?;
     write_json(request.destination, &bundle)
 }
 
