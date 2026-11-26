@@ -592,3 +592,67 @@ def test_recorded_paths_match_coverage_py_for_a_symlinked_source_file(tmp_path: 
     data = ReferenceData(str(work / ".coverage"))
     data.read()
     assert data.measured_files() == {canonical_filename(str(work / "product.py"))}
+
+
+def _terminal_table(result: CommandResult) -> list[str]:
+    lines = result.stdout.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("Name "))
+    end = next(index for index, line in enumerate(lines) if line.startswith("TOTAL"))
+    skipped = [line for line in lines if "skipped due to complete coverage" in line]
+    return [*lines[start : end + 1], *skipped]
+
+
+@pytest.mark.parametrize(
+    "report", ["term", "term-missing", "term:skip-covered", "term-missing:skip-covered"]
+)
+@pytest.mark.parametrize("skip_covered", [None, "true"])
+@pytest.mark.parametrize("show_missing", [None, "true", "false"])
+def test_terminal_report_settings_combine_with_report_options_like_pytest_cov(
+    tmp_path: Path, report: str, show_missing: str | None, skip_covered: str | None
+) -> None:
+    project = VfyProject(tmp_path)
+    write_project(tmp_path)
+    project.write("complete.py", "VALUE = 1\n")
+    project.write(
+        "test_product.py",
+        "import complete\n"
+        "from product import covered\n\n"
+        "def test_covered():\n"
+        "    assert covered() == complete.VALUE * 42\n",
+    )
+    settings = "".join(
+        f"{name} = {value}\n"
+        for name, value in (("show_missing", show_missing), ("skip_covered", skip_covered))
+        if value is not None
+    )
+    project.write(".coveragerc", f"[report]\n{settings}")
+    arguments = ["--cov=.", "--cov-report", report, "-q"]
+
+    expected = project.run_pytest(
+        "-p",
+        "pytest_cov.plugin",
+        *arguments,
+        load_xdist=False,
+        env={
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "COVERAGE_FILE": str(tmp_path / ".coverage.oracle"),
+        },
+    )
+    expected.expect(0)
+    stock = project.run_pytest(
+        "-p",
+        "vfy.pytest_plugin",
+        *arguments,
+        load_xdist=False,
+        env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+    )
+    stock.expect(0)
+    independent = project.run_vfy("test", "--engine=native", "--no-replay", *arguments)
+    independent.expect(0)
+
+    table = _terminal_table(expected)
+    assert any("Missing" in line for line in table) == (
+        report.startswith("term-missing") or show_missing == "true"
+    )
+    assert _terminal_table(stock) == table
+    assert _terminal_table(independent) == table
