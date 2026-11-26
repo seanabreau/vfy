@@ -13,7 +13,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: native-pytest-${{ github.ref }}
+  # PR CI already cancels superseded runs. Keep calls out of the shared queue.
+  group: ${{ inputs.merge_check && format('pr-native-pytest-{0}', github.run_id) || format('native-pytest-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
