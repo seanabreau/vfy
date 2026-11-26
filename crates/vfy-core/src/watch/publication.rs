@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::output::{PreparedFile, PublishedFile, prepare, restore};
+use crate::output::{PreparedFile, PublishedFile, prepare, prepare_replacement, restore};
 
 use super::{RunCurrency, RunOutcome, WatchSession};
 
@@ -109,15 +109,16 @@ impl WatchSession {
                 .parent()
                 .ok_or_else(|| io::Error::other("output requires a parent directory"))?;
             std::fs::create_dir_all(parent)?;
+            let (destination, replacement) = prepare_replacement(&source, &destination)?;
             let previous = match prepare(&destination, parent) {
                 Ok(previous) => Some(previous),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error),
             };
             prepared.push(PreparedFile {
-                replacement: prepare(&source, parent)?,
-                previous,
                 destination,
+                replacement,
+                previous,
             });
         }
         if !self.is_current()? {

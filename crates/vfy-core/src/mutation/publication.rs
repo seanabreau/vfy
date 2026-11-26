@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::output::{PreparedFile, PublishedFile, file_digest, prepare, restore};
+use crate::output::{
+    PreparedFile, PublishedFile, file_digest, prepare, prepare_replacement, restore,
+};
 
 /// The artifact written by a mutation run.
 #[derive(Clone, Copy, Ord, PartialEq, PartialOrd, Eq)]
@@ -211,14 +213,15 @@ impl MutationPublication {
                 .parent()
                 .ok_or_else(|| io::Error::other("mutation artifact requires a parent"))?;
             std::fs::create_dir_all(parent)?;
-            let previous = match prepare(&file.destination, parent) {
+            let (destination, replacement) = prepare_replacement(&file.staged, &file.destination)?;
+            let previous = match prepare(&destination, parent) {
                 Ok(previous) => Some(previous),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error),
             };
             prepared.push(PreparedFile {
-                destination: file.destination.clone(),
-                replacement: prepare(&file.staged, parent)?,
+                destination,
+                replacement,
                 previous,
             });
         }

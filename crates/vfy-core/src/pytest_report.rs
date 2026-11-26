@@ -18,7 +18,10 @@ use crate::test_execution::{
 use sha2::{Digest, Sha256};
 
 use crate::html::escape;
-use crate::output::{PreparedFile, PublishedFile, prepare, restore};
+use crate::output::{
+    NEW_FILE_MODE, OutputTarget, PreparedFile, PublishedFile, output_target, prepare,
+    replacement_file, restore,
+};
 use crate::{CoreError, absolute_path, atomic_write};
 
 // Python strict decoding permits nonzero unused bits in the final base64 digit.
@@ -536,10 +539,16 @@ fn commit_outputs(outputs: &[(PathBuf, Vec<u8>)]) -> Result<(), CoreError> {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error),
             };
-            let mut replacement = tempfile::NamedTempFile::new_in(parent)?;
+            // Files published together are replaced by rename; a stream cannot be rolled back.
+            let OutputTarget::File { path, mode } = output_target(&destination)? else {
+                return Err(std::io::Error::other(
+                    "a report with several files can only replace regular files",
+                ));
+            };
+            let mut replacement = replacement_file(&path, mode, NEW_FILE_MODE)?;
             replacement.write_all(content)?;
             Ok(PreparedFile {
-                destination: destination.clone(),
+                destination: path,
                 replacement,
                 previous,
             })

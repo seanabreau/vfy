@@ -120,8 +120,9 @@ paths resolve from the invocation directory. Expansion is limited to 64 levels,
 If a selected test ID no longer exists at collection, the run fails before test
 bodies start and keeps the passing baseline.
 
-JUnit output replaces its target atomically. The target's parent directory must
-be writable, including when the target is a symlink.
+JUnit output follows a symlink and replaces its final target atomically,
+keeping that file's permissions; the target's directory must be writable. A
+device or FIFO, such as `/dev/stdout`, is written in place.
 
 ### Pytest coverage options
 
@@ -317,6 +318,12 @@ package.
 
 Output goes to the command's output option, the configured destination, or the
 command's default. `-` means stdout. Diagnostics and confirmations go to stderr.
+
+Report files have the effects of Coverage.py writing them with `open(path, "w")`:
+a symlink is followed and its final target is written, an existing file keeps
+its permissions, and a new file gets `0o666` less the umask. vfy replaces a
+regular file atomically, so a failed write leaves the earlier report. A device
+or FIFO, such as `/dev/stdout`, is written in place.
 
 `coverage run` accepts `-a/--append`, `--branch`, `--decisions`,
 `-p/--parallel-mode`, `-m/--module`, repeatable `--source`, `--include`, and

@@ -7,17 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::fs::{self, OpenOptions};
-use std::io::{self, BufWriter, ErrorKind, Write};
-use std::path::{Path, PathBuf};
-use tempfile::Builder;
+use std::fs;
+use std::io;
+use std::path::Path;
 use vfy_core::test_execution::{
     CaseResult, CollectionOutcome, ExecutionOutcome, ExecutionPhase, PhaseResult, PythonText,
     RunRecord, SubtestResult,
 };
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 pub(crate) struct TerminalSummary {
     pub(crate) short_lines: Vec<Py<PyAny>>,
@@ -710,140 +706,16 @@ pub(crate) fn write_junit_atomic(
     }
     document.push_str(" name=\"pytest tests\">");
     document.push_str(&body);
-    publish_junit_atomic(destination, |file| {
-        let mut writer = BufWriter::new(file);
-        writer.write_all(document.as_bytes())?;
-        writer.flush()
-    })
-    .map_err(|error| os_error(py, &error, destination))
+    vfy_core::atomic_write(destination, document.as_bytes())
+        .map_err(|error| os_error(py, &error, destination))
 }
 
 #[pyfunction]
 pub(crate) fn publish_junit_xml(py: Python<'_>, destination: &str, xml: &str) -> PyResult<()> {
-    py.detach(|| {
-        publish_junit_atomic(Path::new(destination), |file| {
-            file.write_all(xml.as_bytes())
-        })
-    })
-    // This replaces pytest's own `open(logfile, "w")`, so failures raise the
-    // same `OSError` that pytest would.
-    .map_err(|error| os_error(py, &error, Path::new(destination)))
-}
-
-fn publish_junit_atomic(
-    destination: &Path,
-    write_xml: impl FnOnce(&mut fs::File) -> io::Result<()>,
-) -> io::Result<()> {
-    let destination = resolve_junit_destination(destination)?;
-    let parent = destination
-        .parent()
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-
-    let destination_metadata = match fs::metadata(&destination) {
-        Ok(metadata) => Some(metadata),
-        Err(error) if error.kind() == ErrorKind::NotFound => None,
-        Err(error) => return Err(error),
-    };
-    if destination_metadata
-        .as_ref()
-        .is_some_and(|metadata| metadata.is_dir() || metadata.is_file())
-    {
-        // Opening reports the same error, such as EISDIR, as pytest's own open.
-        OpenOptions::new().write(true).open(&destination)?;
-    }
-
-    #[cfg(unix)]
-    let destination_mode = destination_metadata
-        .as_ref()
-        .map(|metadata| metadata.permissions().mode() & 0o7777);
-
-    fs::create_dir_all(parent)?;
-    #[cfg(unix)]
-    let mut temporary = {
-        let mut builder = Builder::new();
-        let temporary_mode = if destination_mode.is_some() {
-            0o600
-        } else {
-            0o666
-        };
-        builder.permissions(fs::Permissions::from_mode(temporary_mode));
-        builder.tempfile_in(parent)?
-    };
-    #[cfg(not(unix))]
-    let mut temporary = Builder::new().tempfile_in(parent)?;
-    write_xml(temporary.as_file_mut())?;
-
-    #[cfg(unix)]
-    if let Some(mode) = destination_mode {
-        temporary
-            .as_file()
-            .set_permissions(fs::Permissions::from_mode(mode))?;
-    }
-
-    temporary
-        .persist(destination)
-        .map_err(|error| error.error)?;
-    Ok(())
-}
-
-const MAX_JUNIT_SYMLINK_HOPS: usize = 40;
-
-fn resolve_junit_destination(destination: &Path) -> io::Result<PathBuf> {
-    let metadata = match fs::symlink_metadata(destination) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            return Ok(destination.to_path_buf());
-        }
-        Err(error) => return Err(error),
-    };
-    if !metadata.file_type().is_symlink() {
-        return Ok(destination.to_path_buf());
-    }
-
-    match fs::canonicalize(destination) {
-        Ok(path) => Ok(path),
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            resolve_dangling_junit_symlink(destination)
-        }
-        Err(error) => Err(error),
-    }
-}
-
-fn resolve_dangling_junit_symlink(destination: &Path) -> io::Result<PathBuf> {
-    let mut path = destination.to_path_buf();
-    for _ in 0..=MAX_JUNIT_SYMLINK_HOPS {
-        let target = fs::read_link(&path)?;
-        path = if target.is_absolute() {
-            target
-        } else {
-            path.parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new("."))
-                .join(target)
-        };
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {}
-            Ok(_) => return fs::canonicalize(path),
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                let file_name = path.file_name().ok_or_else(|| {
-                    io::Error::new(
-                        ErrorKind::InvalidInput,
-                        "dangling JUnit symlink target has no file name",
-                    )
-                })?;
-                let parent = path
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
-                    .unwrap_or_else(|| Path::new("."));
-                return Ok(fs::canonicalize(parent)?.join(file_name));
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    Err(io::Error::other(
-        "too many symbolic links in JUnit report path",
-    ))
+    py.detach(|| vfy_core::atomic_write(Path::new(destination), xml.as_bytes()))
+        // This replaces pytest's own `open(logfile, "w")`, so failures raise the
+        // same `OSError` that pytest would.
+        .map_err(|error| os_error(py, &error, Path::new(destination)))
 }
 
 struct JUnitCounts {

@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::output::{OutputTarget, output_target, replacement_file};
 use rusqlite::{Connection, params, params_from_iter};
-use tempfile::NamedTempFile;
 
 use super::CoverageData;
 use crate::data::DataError;
@@ -55,7 +55,18 @@ impl CoverageData {
             .unwrap_or_else(|| Path::new("."));
         std::fs::create_dir_all(parent)
             .map_err(|source| DataError::filesystem("create coverage directory", source))?;
-        let temporary = NamedTempFile::new_in(parent).map_err(|source| {
+        let OutputTarget::File { path, .. } = output_target(path)
+            .map_err(|source| DataError::filesystem("inspect coverage database", source))?
+        else {
+            return Err(DataError::invalid(
+                "write coverage database",
+                "the data file must be a regular file",
+            ));
+        };
+        let path = path.as_path();
+        // Coverage.py erases the data file and SQLite recreates it with mode
+        // 0o644 less the umask, so an earlier mode is not kept.
+        let temporary = replacement_file(path, None, 0o644).map_err(|source| {
             DataError::filesystem("create temporary coverage database", source)
         })?;
         let mut connection = Connection::open(temporary.path())
