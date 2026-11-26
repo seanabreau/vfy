@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypedDict, cast, override
 
 from vfy import native
-from vfy._closed_stdout import CLOSED_STDOUT_STATUS, discard_stdout, flush_stdout_before_exit
+from vfy._closed_stdout import exit_child_on_closed_stdout, flush_stdout_before_exit
 
 
 class _StreamOptions(TypedDict):
@@ -225,6 +225,7 @@ def main(
     captured application startup policy also governs any nested owned workers.
     """
     owner = native._pytest.NativeIndependentInvocation(parent_pid=controller_parent)
+    results_path = os.environ.get("VFY_TEST_RESULTS") if controller_parent is not None else None
     if controller_parent is None:
         owner.bind_worker(
             os.environ["VFY_NATIVE_PARALLEL_DIR"], int(os.environ["VFY_NATIVE_PARALLEL_INDEX"])
@@ -305,6 +306,4 @@ def main(
             else:
                 raise ValueError(f"unsupported independent worker command: {command[:2]!r}")
     except BrokenPipeError:
-        # The controller turns this status into the stock command's quiet exit.
-        discard_stdout()
-        raise SystemExit(CLOSED_STDOUT_STATUS) from None
+        exit_child_on_closed_stdout(results_path)

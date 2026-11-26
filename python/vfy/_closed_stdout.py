@@ -12,10 +12,16 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from typing import NoReturn
 
-# A test process exits with the shell's status for a SIGPIPE ending (128 + 13)
-# so the controller can tell a closed pipe apart from a failed test run.
+# Use the shell's status for SIGPIPE (128 + 13) alongside a private marker.
 CLOSED_STDOUT_STATUS = 141
+
+
+def closed_stdout_marker(results_path: str) -> Path:
+    """Locate the marker beside this invocation's test-result file."""
+    return Path(results_path).with_suffix(".stdout-closed")
 
 
 def _flush_stdout() -> None:
@@ -43,3 +49,11 @@ def discard_stdout() -> None:
         os.dup2(devnull, sys.stdout.fileno())
     finally:
         os.close(devnull)
+
+
+def exit_child_on_closed_stdout(results_path: str | None) -> NoReturn:
+    """Quietly terminate the test process and notify its controller."""
+    discard_stdout()
+    if results_path is not None:
+        closed_stdout_marker(results_path).touch()
+    raise SystemExit(CLOSED_STDOUT_STATUS) from None

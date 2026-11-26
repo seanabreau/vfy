@@ -120,3 +120,14 @@ def test_buffered_stdout_is_flushed_before_exit(tmp_path: Path, arguments: tuple
         env={"PYTHONUNBUFFERED": None},
     )
     assert (result.returncode, result.stdout, result.stderr) == (1, "", "")
+
+
+def test_requested_exit_status_is_preserved_with_open_stdout(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write(
+        "test_exit.py",
+        "import pytest\n\ndef test_exits():\n    pytest.exit('requested exit', returncode=141)\n",
+    )
+    reference = project.run_pytest()
+    actual = project.run_vfy("--quiet", "test", "--engine=native", "--no-cov")
+    assert actual.returncode == reference.returncode == 141

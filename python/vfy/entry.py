@@ -17,7 +17,7 @@ def main() -> int:
         with flush_stdout_before_exit():
             return _main()
     except BrokenPipeError:
-        # pytest and Coverage.py both end with status 1 when stdout closes early.
+        # Match pytest's quiet exit when stdout closes early.
         discard_stdout()
         return 1
 
