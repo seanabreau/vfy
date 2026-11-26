@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
-use super::git::{IndexEntry, parse_index, submodule_change};
+use super::git::{IndexEntry, parse_index};
 use super::graph::PortableGraph;
 use super::plan::node_file;
 use super::{SelectionMode, SelectionPlan, read_git_replay_state, sort_tests, test_context};
@@ -259,9 +259,11 @@ fn validate_export_source(
     root: &Path,
     index: &BTreeMap<String, IndexEntry>,
     digests: &BTreeMap<String, String>,
+    head: &str,
+    ignored: &[String],
 ) -> Result<(), CoreError> {
     let current = source_inputs(root)?;
-    if &current != index || submodule_change(root, &current).map_err(invalid)?.is_some() {
+    if &current != index {
         return Err(invalid("source changed during baseline export"));
     }
     for (path, entry) in &current {
@@ -269,8 +271,8 @@ fn validate_export_source(
             return Err(invalid("source changed during baseline export"));
         }
     }
-    let current = read_git_replay_state(request.ignored).map_err(invalid)?;
-    if current.head != state.head || !current.changed.is_empty() {
+    let current = read_git_replay_state(ignored).map_err(invalid)?;
+    if current.head != head || !current.changed.is_empty() || current.submodule_change.is_some() {
         return Err(invalid("checkout changed during baseline export"));
     }
     Ok(())
@@ -369,7 +371,13 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
         coverage_digest,
     };
     bundle.import_graph.validate(&tracked)?;
-    validate_export_source(&root, &index, &bundle.source_digests)?;
+    validate_export_source(
+        &root,
+        &index,
+        &bundle.source_digests,
+        &state.head,
+        request.ignored,
+    )?;
     write_json(request.destination, &bundle)
 }
 
