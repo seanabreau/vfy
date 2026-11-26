@@ -673,6 +673,7 @@ def test_ci_plan_cannot_overwrite_tracked_bytecode(tmp_path: Path) -> None:
         "test", "--engine=native", "--all", "--plan-output", cache, *_ARGUMENTS
     )
 
-    result.expect(4)
+    result.expect(1)
     assert "CI outputs cannot replace tracked source files" in result.stderr
     assert (tmp_path / cache).read_text() == "tracked file\n"
+    assert not (tmp_path / ".coverage").exists()
