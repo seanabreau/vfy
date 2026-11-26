@@ -6,7 +6,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pr-ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
