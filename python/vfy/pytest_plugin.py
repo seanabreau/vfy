@@ -825,7 +825,7 @@ class VfyCovPlugin:
         if self._record_controller_durations:
             self._worker_test_durations.extend(output.get("vfy_test_durations", []))
 
-    def _phase_context(self, item: pytest.Function, phase: str) -> None:
+    def _phase_context(self, item: pytest.Item, phase: str) -> None:
         if (
             self.coverage is not None
             and self.coverage._started
@@ -836,20 +836,23 @@ class VfyCovPlugin:
                 context = f"{self._base_context}|{context}"
             self.coverage.switch_context(context)
 
-    def pytest_runtest_setup(self, item: pytest.Function) -> None:
+    def pytest_runtest_setup(self, item: pytest.Item) -> None:
         self._phase_context(item, "setup")
 
     @pytest.hookimpl(hookwrapper=True)
-    def pytest_runtest_call(self, item: pytest.Function) -> Generator[None, Result[None], None]:
+    def pytest_runtest_call(self, item: pytest.Item) -> Generator[None, Result[None], None]:
         self._phase_context(item, "run")
-        disabled = bool(item.get_closest_marker("no_cover") or "no_cover" in item.fixturenames)
+        # Custom ``pytest.Item`` subclasses have no fixture names.
+        disabled = bool(
+            item.get_closest_marker("no_cover") or "no_cover" in getattr(item, "fixturenames", ())
+        )
         if disabled and self.coverage is not None:
             self.coverage.stop()
         yield
         if disabled and self.coverage is not None:
             self.coverage.start()
 
-    def pytest_runtest_teardown(self, item: pytest.Function) -> None:
+    def pytest_runtest_teardown(self, item: pytest.Item) -> None:
         self._phase_context(item, "teardown")
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -1244,14 +1247,17 @@ def pytest_configure(config: pytest.Config) -> None:
     _env_coverage.start()
 
 
-def pytest_runtest_setup(item: pytest.Function) -> None:
+def pytest_runtest_setup(item: pytest.Item) -> None:
     if _env_coverage is not None and _env_coverage._started:
         _env_coverage.switch_context(item.nodeid)
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_call(item: pytest.Function) -> Generator[None, Result[None], None]:
-    disabled = bool(item.get_closest_marker("no_cover") or "no_cover" in item.fixturenames)
+def pytest_runtest_call(item: pytest.Item) -> Generator[None, Result[None], None]:
+    # Custom ``pytest.Item`` subclasses have no fixture names.
+    disabled = bool(
+        item.get_closest_marker("no_cover") or "no_cover" in getattr(item, "fixturenames", ())
+    )
     if disabled and _env_coverage is not None:
         _env_coverage.stop()
     yield
@@ -1259,7 +1265,7 @@ def pytest_runtest_call(item: pytest.Function) -> Generator[None, Result[None], 
         _env_coverage.start()
 
 
-def pytest_runtest_teardown(item: pytest.Function) -> None:
+def pytest_runtest_teardown(item: pytest.Item) -> None:
     if _env_coverage is not None and _env_coverage._started:
         _env_coverage.switch_context("")
 
