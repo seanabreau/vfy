@@ -1,14 +1,12 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pr-ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -24,8 +22,9 @@ jobs:
       contents: read
     outputs:
       scope: ${{ steps.classify.outputs.scope }}
-      run_quality: ${{ steps.classify.outputs.run_quality }}
-      full_matrix: ${{ steps.classify.outputs.full_matrix }}
+      check_docs: ${{ steps.classify.outputs.check_docs }}
+      check_release: ${{ steps.classify.outputs.check_release }}
+      check_corpus: ${{ steps.classify.outputs.check_corpus }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,13 +34,7 @@ jobs:
         id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            python scripts/ci_change_plan.py --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
-          else
-            printf '%s\n' 'scope=platform' 'run_quality=true' 'full_matrix=true' >> "$GITHUB_OUTPUT"
-          fi
+        run: python scripts/ci_change_plan.py --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
 
   repository:
     name: Repository checks
@@ -86,13 +79,14 @@ jobs:
           tests/repository/test_ci_metrics.py
           tests/repository/test_layout.py
           tests/repository/test_release_artifacts.py
+          tests/repository/test_workflows.py
 
   documentation:
     name: Documentation checks
     needs: change-scope
-    if: needs.change-scope.outputs.scope == 'documentation'
+    if: needs.change-scope.outputs.check_docs == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -103,19 +97,60 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - name: Install locked documentation dependencies
-        run: uv sync --locked --group dev --group docs
+      - name: Build the strict documentation site
+        run: |
+          uv sync --locked --only-group docs --no-install-project
+          uv run --no-sync zensical build --clean --strict
       - name: Execute documented examples
-        run: uv run --no-sync pytest -q tests/integration/test_documentation.py tests/integration/test_documented_semantic.py
+        if: needs.change-scope.outputs.scope == 'documentation'
+        run: |
+          uv sync --locked --group dev
+          uv run --no-sync pytest -q tests/integration/test_documentation.py tests/integration/test_documented_semantic.py
       - name: Install and run the pinned standalone tutorials
         run: uv run --no-sync python scripts/check_tutorial_install.py
-      - name: Build documentation
-        run: uv run --no-sync zensical build --clean --strict
 
-  quality:
-    name: Quality and compatibility
+  linux-wheel:
+    name: Test Linux wheel on Python 3.12
     needs: change-scope
-    if: needs.change-scope.outputs.run_quality == 'true'
+    if: needs.change-scope.outputs.scope != 'documentation' && needs.change-scope.outputs.check_release != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.14.1
+          sccache: "true"
+          command: build
+          args: --release --locked --out dist
+      - name: Smoke test the wheel in an empty environment
+        run: |
+          uv venv --python 3.12 target/wheel-smoke
+          uv pip install --no-index --python target/wheel-smoke/bin/python dist/vfy-*.whl
+          target/wheel-smoke/bin/python scripts/smoke_wheel.py
+      - name: Install the locked test dependencies and the built wheel
+        run: |
+          uv sync --locked --group dev --group benchmark --no-install-project --python 3.12
+          uv pip install --reinstall --no-deps dist/vfy-*.whl
+      - name: Verify installed native typing declarations
+        run: uv run --no-sync python scripts/check_wheel_typing.py
+      - name: Run the complete Python suite
+        run: uv run --no-sync pytest -n auto
+
+  rust:
+    name: Rust lints and workspace tests
+    needs: change-scope
+    if: >-
+      needs.change-scope.outputs.check_release != 'true' &&
+      (needs.change-scope.outputs.scope == 'rust' || needs.change-scope.outputs.scope == 'unknown')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -128,65 +163,37 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - name: Install locked development environment
-        run: uv sync --locked --group dev --group benchmark
-      - name: Rust lints
+      - name: Install the locked Rust test environment
+        run: uv sync --locked --group dev
+      - name: Lint Rust targets
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-      - name: Test the pure Rust core without the extension environment
+      - name: Test the Rust core without the extension environment
         run: env -u PYO3_PYTHON cargo test --locked --manifest-path crates/vfy-core/Cargo.toml
       - name: Install Rust test runners
         uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2.86.5
         with:
           tool: cargo-nextest@0.9.143,cargo-insta@1.48.0
           fallback: none
-      - name: Rust tests and reviewed snapshots
+      - name: Test the Rust workspace and check reviewed snapshots
         run: scripts/cargo-insta-test.sh --locked --workspace --no-default-features
-      - name: Differential and round-trip tests
-        run: uv run pytest -n auto
-      - name: Native pytest-mock compatibility
-        run: bash scripts/check_native_pytest_mock_versions.sh
-      # XML output parity is tracked separately; this smoke covers terminal and JSON.
-      - name: Parity-gated benchmark smoke test
-        run: |
-          mkdir -p target/benchmarks
-          uv run python -m benchmarks run report --report-formats terminal json \
-            --files 5 --mode diagnostic --warmups 0 --runs 1 \
-            --output target/benchmarks/benchmark-smoke.json
-      - name: Edit-loop selection parity smoke test
-        run: >-
-          uv run python -m benchmarks validate edit-loop
-          --modules 5
 
-  rust-matrix:
-    name: Rust workspace tests on ${{ matrix.os }}
+  release-tooling:
+    name: Check release tooling
     needs: change-scope
-    if: needs.change-scope.outputs.full_matrix == 'true'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    if: needs.change-scope.outputs.check_release == 'true'
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - name: Install the locked Rust test environment
-        run: uv sync --locked --group dev
-      - name: Install nextest
-        uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2.86.5
-        with:
-          tool: cargo-nextest@0.9.143
-          fallback: none
-      - name: Run Rust workspace tests
-        shell: bash
-        run: scripts/cargo-nextest.sh --locked --workspace --no-default-features
+    uses: ./.github/workflows/release-verify.yml
+
+  corpus-tooling:
+    name: Check native corpus tooling
+    needs: change-scope
+    if: needs.change-scope.outputs.check_corpus == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-pytest.yml
+    with:
+      merge_check: true
 
   supply-chain:
     name: Dependency hygiene, licenses and advisories
@@ -224,359 +231,10 @@ jobs:
           persona: pedantic
           version: 1.29.0
 
-  build-wheel:
-    name: Build wheel for ${{ matrix.id }}
-    needs: change-scope
-    if: needs.change-scope.outputs.full_matrix == 'true'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: linux
-            os: ubuntu-latest
-          - id: macos
-            os: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          maturin-version: v1.14.1
-          # Reuse compiled dependencies between CI builds; release builds stay uncached.
-          sccache: "true"
-          command: build
-          args: --release --locked --out dist
-      - name: Record Linux wheel build provenance
-        if: matrix.id == 'linux'
-        run: |
-          python -m pip install --no-deps dist/*.whl
-          python - <<'PYTHON'
-          from pathlib import Path
-          import json
-          import subprocess
-          from benchmarks.benchmark_provenance import write_build_manifest
-          root = Path.cwd()
-          path = Path("dist/adoption-build.json")
-          revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-          record = write_build_manifest(path, source_root=root, source_revision=revision,
-              wheel=next(Path("dist").glob("vfy-*.whl")),
-              build_command=("maturin", "build", "--release", "--locked", "--out", "dist"))
-          record["source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
-          path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          PYTHON
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-wheel-${{ matrix.id }}
-          path: |
-            dist/*.whl
-            dist/adoption-build.json
-          if-no-files-found: error
-
-  wheel:
-    name: Test ${{ matrix.id }} wheel on Python ${{ matrix.python }}
-    needs: [change-scope, build-wheel]
-    if: needs.change-scope.outputs.full_matrix == 'true'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        # Test every interpreter on Linux and the floor plus current and
-        # prerelease ceilings on macOS with the pinned pytest oracle.
-        include:
-          - id: linux
-            os: ubuntu-latest
-            python: "3.12"
-          - id: linux
-            os: ubuntu-latest
-            python: "3.13"
-          - id: linux
-            os: ubuntu-latest
-            python: "3.14"
-          - id: linux
-            os: ubuntu-latest
-            python: "3.15"
-          - id: macos
-            os: macos-latest
-            python: "3.12"
-          - id: macos
-            os: macos-latest
-            python: "3.14"
-          - id: macos
-            os: macos-latest
-            python: "3.15"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: ${{ matrix.python }}
-          allow-prereleases: true
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ci-wheel-${{ matrix.id }}
-          path: dist
-      - name: Install the locked test dependencies and the built wheel
-        shell: bash
-        env:
-          PYTHON_VERSION: ${{ matrix.python }}
-        run: |
-          uv sync --locked --group dev --group benchmark --no-install-project --python "$PYTHON_VERSION"
-          uv pip install --reinstall --no-deps dist/*.whl
-      - name: Check the wheel without a Rust toolchain
-        run: |
-          uv run --no-sync python scripts/smoke_wheel.py
-          uv run --no-sync python scripts/check_wheel_typing.py
-      - name: Install the wheel without other packages
-        shell: bash
-        env:
-          PYTHON_VERSION: ${{ matrix.python }}
-        run: |
-          uv venv --python "$PYTHON_VERSION" .vfy-only
-          uv pip install --python .vfy-only dist/*.whl
-          installed="$(uv pip list --python .vfy-only --format freeze)"
-          echo "$installed"
-          [[ "$installed" =~ ^vfy==[^[:space:]]+$ ]]
-          python=.vfy-only/bin/python
-          [[ -x "$python" ]] || python=.vfy-only/Scripts/python.exe
-          printf 'print("measured")\n' > vfy_only_check.py
-          "$python" -m vfy coverage run vfy_only_check.py
-          "$python" -m vfy coverage report --include=vfy_only_check.py --fail-under=100
-      - name: Differential and round-trip tests against the installed wheel
-        run: uv run --no-sync pytest -n auto
-      - name: Asyncio compatibility with pinned pytest
-        run: |
-          uv pip uninstall pytest-asyncio
-          uv run --no-sync pytest -q tests/integration/test_asyncio_floor.py
-      - name: Check minimum xdist with pinned pytest
-        if: matrix.id == 'linux' && matrix.python == '3.12'
-        shell: bash
-        run: |
-          uv pip install 'pytest==9.1.1' 'pytest-xdist==3.6.1'
-          uv run --no-sync pytest -q tests/integration/test_pytest_cov_compat.py
-
-  build-wheel-fast:
-    name: Build fast-feedback Linux wheel
-    needs: change-scope
-    if: >-
-      needs.change-scope.outputs.scope != 'documentation' &&
-      needs.change-scope.outputs.full_matrix != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          maturin-version: v1.14.1
-          # Reuse compiled dependencies between CI builds; release builds stay uncached.
-          sccache: "true"
-          command: build
-          args: --release --locked --out dist
-      - name: Record Linux wheel build provenance
-        run: |
-          python -m pip install --no-deps dist/*.whl
-          python - <<'PYTHON'
-          from pathlib import Path
-          import json
-          import subprocess
-          from benchmarks.benchmark_provenance import write_build_manifest
-          root = Path.cwd()
-          path = Path("dist/adoption-build.json")
-          revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-          record = write_build_manifest(path, source_root=root, source_revision=revision,
-              wheel=next(Path("dist").glob("vfy-*.whl")),
-              build_command=("maturin", "build", "--release", "--locked", "--out", "dist"))
-          record["source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
-          path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          PYTHON
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-wheel-fast
-          path: |
-            dist/*.whl
-            dist/adoption-build.json
-          if-no-files-found: error
-
-  wheel-fast:
-    name: Test fast-feedback Linux wheel on Python 3.12
-    needs: [change-scope, build-wheel-fast]
-    if: >-
-      needs.change-scope.outputs.scope != 'documentation' &&
-      needs.change-scope.outputs.full_matrix != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ci-wheel-fast
-          path: dist
-      - name: Install the locked test dependencies and the built wheel
-        run: |
-          uv sync --locked --group dev --group benchmark --no-install-project --python 3.12
-          uv pip install --reinstall --no-deps dist/*.whl
-      - name: Check the wheel without a Rust toolchain
-        run: |
-          uv run --no-sync python scripts/smoke_wheel.py
-          uv run --no-sync python scripts/check_wheel_typing.py
-      - name: Differential and round-trip tests against the installed wheel
-        run: uv run --no-sync pytest -n auto
-      - name: Check minimum xdist with pinned pytest
-        shell: bash
-        run: |
-          uv pip uninstall pytest-asyncio
-          uv pip install 'pytest==9.1.1' 'pytest-xdist==3.6.1'
-          uv run --no-sync pytest -q tests/integration/test_pytest_cov_compat.py
-
-  native-pytest:
-    name: Test native pytest ${{ matrix.pytest }} on Linux
-    needs: [change-scope, build-wheel, build-wheel-fast]
-    # One wheel build is skipped; allow that dependency here.
-    if: >-
-      always() && needs.change-scope.result == 'success' &&
-      needs.change-scope.outputs.scope != 'documentation' &&
-      ((needs.change-scope.outputs.full_matrix == 'true' && needs.build-wheel.result == 'success') ||
-       (needs.change-scope.outputs.full_matrix != 'true' && needs.build-wheel-fast.result == 'success'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        pytest: ["9.1.0", "9.1.1", "9.2.0"]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.change-scope.outputs.full_matrix == 'true' && 'ci-wheel-linux' || 'ci-wheel-fast' }}
-          path: dist
-      - name: Install the locked test dependencies and the built wheel
-        run: |
-          uv sync --locked --group dev --group benchmark --no-install-project --python 3.12
-          uv pip install --reinstall --no-deps dist/*.whl
-      - name: Test the native pytest range and optional xdist boundary
-        env:
-          PYTEST_VERSION: ${{ matrix.pytest }}
-        run: bash scripts/check_native_pytest_versions.sh "$PYTEST_VERSION"
-
-  native-adoption:
-    name: Native and independent adoption on Linux
-    needs: [change-scope, build-wheel, build-wheel-fast]
-    # One wheel build is skipped; allow that dependency here.
-    if: >-
-      always() && needs.change-scope.result == 'success' &&
-      needs.change-scope.outputs.scope != 'documentation' &&
-      ((needs.change-scope.outputs.full_matrix == 'true' && needs.build-wheel.result == 'success') ||
-       (needs.change-scope.outputs.full_matrix != 'true' && needs.build-wheel-fast.result == 'success'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: needs.change-scope.outputs.full_matrix == 'true'
-        with:
-          name: ci-wheel-linux
-          path: dist
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: needs.change-scope.outputs.full_matrix != 'true'
-        with:
-          name: ci-wheel-fast
-          path: dist
-      - name: Install locked orchestration dependencies
-        run: uv sync --locked --group dev --group benchmark --no-install-project --python 3.12
-      - name: Compare the required pinned adoption projects
-        run: |
-          .venv/bin/python validation/pytest_runner/check_native_adoption_matrix.py \
-            --wheel dist/vfy-*.whl \
-            --build-manifest dist/adoption-build.json \
-            --output target/native-adoption \
-            --python-version 3.12 \
-            --required-subset
-      - name: Compare bare independent packages on Python 3.13
-        env:
-          CORPUS_WORK: ${{ runner.temp }}/vfy-independent-corpus
-          CORPUS_TIMEOUT: "300"
-          PYTHONHASHSEED: "0"
-        run: |
-          .venv/bin/python validation/pytest_runner/real_packages/corpus.py run \
-            --bare --wheel dist/vfy-*.whl --jobs 2 \
-            --out target/native-adoption/independent \
-            iniconfig itsdangerous h11
-      - name: Retain native adoption diagnostics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: native-adoption-linux-py312
-          path: |
-            target/native-adoption/
-            dist/adoption-build.json
-          if-no-files-found: warn
-
   ci-summary:
     name: CI summary
     if: always()
-    needs:
-      [
-        change-scope,
-        repository,
-        documentation,
-        quality,
-        rust-matrix,
-        supply-chain,
-        workflow-security,
-        build-wheel,
-        wheel,
-        build-wheel-fast,
-        wheel-fast,
-        native-pytest,
-        native-adoption,
-      ]
+    needs: [change-scope, repository, documentation, linux-wheel, rust, release-tooling, corpus-tooling, supply-chain, workflow-security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -585,20 +243,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify required tier completed
+      - name: Verify the selected jobs completed
         env:
           CHANGE_SCOPE: ${{ needs.change-scope.result }}
           SCOPE: ${{ needs.change-scope.outputs.scope }}
+          CHECK_DOCS: ${{ needs.change-scope.outputs.check_docs }}
+          CHECK_RELEASE: ${{ needs.change-scope.outputs.check_release }}
+          CHECK_CORPUS: ${{ needs.change-scope.outputs.check_corpus }}
           REPOSITORY: ${{ needs.repository.result }}
           DOCUMENTATION: ${{ needs.documentation.result }}
-          QUALITY: ${{ needs.quality.result }}
+          LINUX_WHEEL: ${{ needs.linux-wheel.result }}
+          RUST: ${{ needs.rust.result }}
+          RELEASE: ${{ needs.release-tooling.result }}
+          NATIVE_CORPUS: ${{ needs.corpus-tooling.result }}
           SUPPLY_CHAIN: ${{ needs.supply-chain.result }}
           WORKFLOW_SECURITY: ${{ needs.workflow-security.result }}
-          RUST_MATRIX: ${{ needs.rust-matrix.result }}
-          FULL_BUILD: ${{ needs.build-wheel.result }}
-          FULL_WHEEL: ${{ needs.wheel.result }}
-          FAST_BUILD: ${{ needs.build-wheel-fast.result }}
-          FAST_WHEEL: ${{ needs.wheel-fast.result }}
-          NATIVE_PYTEST: ${{ needs.native-pytest.result }}
-          NATIVE_ADOPTION: ${{ needs.native-adoption.result }}
         run: bash scripts/check_ci_results.sh
