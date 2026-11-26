@@ -331,7 +331,7 @@ command's default. `-` means stdout. Diagnostics and confirmations go to stderr.
 | `xml`, `lcov` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-o/--output`, `-q/--quiet` |
 | `html` | `--include`, `--omit`, `--contexts`, `--precision`, `--fail-under`, `--ignore-errors`, `-d/--directory`, `--title`, `--skip-covered/--no-skip-covered`, `--skip-empty/--no-skip-empty`, `-q/--quiet` |
 | `annotate` | `--include`, `--omit`, `--contexts`, `--precision`, `--ignore-errors`, `-d/--directory` |
-| `combine` | `--keep`, `--strict`, `-q/--quiet`, and optional shard files or directories |
+| `combine` | `--keep`, `--strict`, and optional shard files or directories |
 | `erase` | `--parallel` to also remove discovered shards |
 | `debug data` | No additional options. Prints `path`, `schema` (always `7`), `has_arcs`, `files` (the file count), and the line count of each measured file. |
 
