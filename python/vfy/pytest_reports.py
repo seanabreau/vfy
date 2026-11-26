@@ -86,12 +86,13 @@ def write_pytest_reports(
 ) -> tuple[float, DecisionReport | None]:
     """Render pytest reports from one already-complete coverage dataset."""
     total: float | None = None
-    skip_covered = "skip-covered" in reports.values()
     if TERM_REPORTS & reports.keys():
+        # Like pytest-cov, a report option only enables a setting; None leaves
+        # [report] show_missing and skip_covered in charge.
         total = coverage.report(
             file=stream,
-            show_missing="term-missing" in reports,
-            skip_covered=skip_covered,
+            show_missing=("term-missing" in reports) or None,
+            skip_covered=("skip-covered" in reports.values()) or None,
             precision=precision,
             ignore_errors=ignore_errors,
         )
