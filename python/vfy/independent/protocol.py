@@ -381,6 +381,20 @@ class Config:
         )
         return _InicfgView(self._configuration)
 
+    @property
+    def rootdir(self) -> LegacyPath:
+        """The rootdir as a legacy ``py.path.local``-style object."""
+        from .legacy_path import LegacyPath  # noqa: PLC0415 - legacy API only
+
+        return LegacyPath(str(self.rootpath))
+
+    @property
+    def inifile(self) -> LegacyPath | None:
+        """The configuration file as a legacy ``py.path.local``-style object."""
+        from .legacy_path import LegacyPath  # noqa: PLC0415 - legacy API only
+
+        return LegacyPath(str(self.inipath)) if self.inipath else None
+
     def cwd_relative_nodeid(self, nodeid: str) -> str:
         return self._configuration.cwd_relative_nodeid(self, nodeid)
 
