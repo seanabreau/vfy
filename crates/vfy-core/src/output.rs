@@ -136,10 +136,13 @@ pub(crate) fn output_target(path: &Path) -> io::Result<OutputTarget> {
                 });
             }
             Ok(metadata) if metadata.is_dir() => {
-                return Err(io::Error::new(
-                    io::ErrorKind::IsADirectory,
-                    "Is a directory",
-                ));
+                // Python uses the OS error number to choose the OSError subclass.
+                let error = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&current)
+                    .err()
+                    .unwrap_or_else(|| io::ErrorKind::IsADirectory.into());
+                return Err(error);
             }
             Ok(_) => return Ok(OutputTarget::Stream),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
