@@ -273,7 +273,7 @@ def _add_test_parser(sub: _SubParsersAction[argparse.ArgumentParser]) -> None:
             "optional pytest integration help (requires vfy[pytest]):\n"
             "  python -m pytest -p no:pytest_cov -p vfy.pytest_plugin --help\n"
             "vfy supports a subset of pytest options; see\n"
-            "https://neocline-vfy-docs.pages.dev/about/compatibility/"
+            "https://vfy.neocline.com/about/compatibility/"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

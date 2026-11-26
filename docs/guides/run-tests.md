@@ -23,7 +23,7 @@ Filtered, no-coverage, and watch runs execute the requested scope. See
 
 ## Pass pytest arguments
 
-Put pytest options after the vfy options:
+Pass pytest options with the vfy options, in any order:
 
 ```console
 uv run vfy test --maxfail=1 -q -m smoke
@@ -251,8 +251,10 @@ Each run starts a fresh test process. Edits during a run queue another run. If
 inputs change before a run saves its results, that run leaves the last accepted
 coverage and reports in place.
 
-After a failed or obsolete run, watch runs the full requested scope before
-selection resumes. Use `--all --watch` to run that scope every time. Watch rejects
+The default engine runs the full requested scope on every watch run. With
+`--engine=pytest-native`, watch selects affected tests; after a failed or
+obsolete run, it runs the full requested scope before selection resumes. Use
+`--all --watch` to run that scope every time. Watch rejects
 test node IDs, `PATH:LINE` targets, and the `balanced` and `aggressive` policies.
 
 ### Watched inputs
