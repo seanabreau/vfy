@@ -197,6 +197,8 @@ class PytestRunner:
                 sys.path.insert(0, working_directory)
             try:
                 return int(pytest.main(list(request.arguments)))
+            except BrokenPipeError:
+                raise  # vfy.entry ends the process quietly.
             except Exception as error:  # noqa: BLE001 - Match unhandled subprocess errors.
                 sys.excepthook(type(error), error, error.__traceback__)
                 return 1

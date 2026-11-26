@@ -389,6 +389,44 @@ class VfyProject:
 
         return self._run([self.interpreter, "-m", "coverage", *arguments], env=env)
 
+    def run_closing_stdout(
+        self,
+        *command: str,
+        lines: int = 1,
+        marker: str = "stdout-closed",
+        env: Mapping[str, str | None] | None = None,
+    ) -> CommandResult:
+        """Run a command whose stdout reader closes the pipe after ``lines`` lines.
+
+        After closing, the reader creates ``marker`` in the project so a fixture
+        can wait for it and make the command's next write fail deterministically.
+        A write already in progress when the reader closes can still succeed.
+        The result holds the lines read and the complete stderr.
+        """
+
+        with subprocess.Popen(
+            list(command),
+            cwd=self.root,
+            env=self._environment(env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            start_new_session=os.name == "posix",
+        ) as process:
+            assert process.stdout is not None
+            try:
+                # Read unbuffered so the pipe keeps everything after the last line read.
+                read = bytearray()
+                while read.count(b"\n") < lines and (byte := process.stdout.read(1)):
+                    read += byte
+                process.stdout.close()
+                (self.root / marker).touch()
+                _stdout, stderr = process.communicate(timeout=self.timeout)
+            except BaseException:
+                kill_process_tree(process)
+                raise
+        return CommandResult(process.returncode, read.decode(), stderr.decode(), tuple(command))
+
     def run_pytest(
         self,
         *arguments: str,

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 from typing import TYPE_CHECKING
 
+from vfy._closed_stdout import CLOSED_STDOUT_STATUS
 from vfy.runner import PytestRunner
 
 from .bootstrap import prepare_bootstrap
@@ -23,6 +25,10 @@ class IndependentRunner:
             request.environment,
             controller_parent=os.getpid(),
         )
-        return PytestRunner((sys.executable, *arguments)).run(
+        status = PytestRunner((sys.executable, *arguments)).run(
             request._replace(arguments=(), environment=environment)
         )
+        if status == CLOSED_STDOUT_STATUS:
+            # The child stopped because stdout closed and recorded no results.
+            raise BrokenPipeError(errno.EPIPE, "standard output was closed")
+        return status

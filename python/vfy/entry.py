@@ -8,10 +8,20 @@ import signal
 import sys
 
 from ._cli_arguments import escape_arguments
+from ._closed_stdout import discard_stdout
 from .native import is_test_cli
 
 
 def main() -> int:
+    try:
+        return _main()
+    except BrokenPipeError:
+        # pytest and Coverage.py both end with status 1 when stdout closes early.
+        discard_stdout()
+        return 1
+
+
+def _main() -> int:
     os.environ["VFY_IN_PROCESS_PYTEST"] = "1"
     # pytest-xdist reports the user's command as workerinput["mainargv"].
     os.environ["VFY_NATIVE_MAINARGV"] = json.dumps(sys.argv)

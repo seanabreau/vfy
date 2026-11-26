@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypedDict, cast, override
 
 from vfy import native
+from vfy._closed_stdout import CLOSED_STDOUT_STATUS, discard_stdout
 
 
 class _StreamOptions(TypedDict):
@@ -274,31 +275,36 @@ def main(
         if not startup["safe_path"]:
             sys.path.insert(0, os.getcwd())
 
-    with ExitStack() as resources:
-        resources.callback(owner.close)
-        resources.enter_context(_multiprocessing_startup(startup))
-        resources.enter_context(_traceback_startup(startup))
-        _restore_stdio(startup["stdio_options"])
-        if command[:2] == ["-m", "vfy.independent.mutation_child"]:
-            runpy.run_module(
-                "vfy.independent.mutation_child",
-                run_name="__main__",
-                alter_sys=True,
-                init_globals={
-                    "_vfy_worker_invocation": owner,
-                    "_vfy_worker_startup": restore_startup,
-                },
-            )
-        elif command[:2] == ["-m", "vfy.independent.entry"]:
-            restore_startup()
-            runpy.run_module(
-                "vfy.independent.entry",
-                run_name="__main__",
-                alter_sys=True,
-                init_globals={
-                    "_vfy_worker_invocation": owner,
-                    "_vfy_startup_options": startup,
-                },
-            )
-        else:
-            raise ValueError(f"unsupported independent worker command: {command[:2]!r}")
+    try:
+        with ExitStack() as resources:
+            resources.callback(owner.close)
+            resources.enter_context(_multiprocessing_startup(startup))
+            resources.enter_context(_traceback_startup(startup))
+            _restore_stdio(startup["stdio_options"])
+            if command[:2] == ["-m", "vfy.independent.mutation_child"]:
+                runpy.run_module(
+                    "vfy.independent.mutation_child",
+                    run_name="__main__",
+                    alter_sys=True,
+                    init_globals={
+                        "_vfy_worker_invocation": owner,
+                        "_vfy_worker_startup": restore_startup,
+                    },
+                )
+            elif command[:2] == ["-m", "vfy.independent.entry"]:
+                restore_startup()
+                runpy.run_module(
+                    "vfy.independent.entry",
+                    run_name="__main__",
+                    alter_sys=True,
+                    init_globals={
+                        "_vfy_worker_invocation": owner,
+                        "_vfy_startup_options": startup,
+                    },
+                )
+            else:
+                raise ValueError(f"unsupported independent worker command: {command[:2]!r}")
+    except BrokenPipeError:
+        # The controller turns this status into the stock command's quiet exit.
+        discard_stdout()
+        raise SystemExit(CLOSED_STDOUT_STATUS) from None
