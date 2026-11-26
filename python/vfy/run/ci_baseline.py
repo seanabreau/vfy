@@ -118,7 +118,11 @@ def _publish_test_evidence(
         else:
             fresh.write(args.data_file)
             _controller_message(args, "Passing baseline preserved because the selected run failed")
-    elif completed == 0 and _can_publish_green_baseline(args, invocation):
+    elif (
+        completed == 0
+        and evidence.state.submodule_change is None
+        and _can_publish_green_baseline(args, invocation)
+    ):
         identity_validation_started = _profile_begin()
         try:
             current_head = (

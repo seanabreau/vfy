@@ -291,21 +291,19 @@ pub(crate) fn plan_test_selection(
 ) -> PyResult<Py<PyAny>> {
     let mode = SelectionMode::parse(mode).map_err(core_error)?;
     let history = read_history(Path::new(history_path));
-    let patch = match (patch, location.is_some()) {
-        (Some(value), _) => value,
-        (None, true) => String::new(),
+    let (patch, submodule_change) = match (patch, location.is_some()) {
+        (Some(value), true) => (value, None),
+        (Some(value), false) => (
+            value,
+            vfy_core::selection::read_submodule_change(Path::new("."))
+                .map_err(PyRuntimeError::new_err)?,
+        ),
+        (None, true) => (String::new(), None),
         (None, false) => {
-            vfy_core::selection::read_git_replay_state(&[])
-                .map_err(PyRuntimeError::new_err)?
-                .patch
+            let state =
+                vfy_core::selection::read_git_replay_state(&[]).map_err(PyRuntimeError::new_err)?;
+            (state.patch, state.submodule_change)
         }
-    };
-    // A source diff cannot describe a submodule; it is trusted only at its recorded commit.
-    let submodule_change = if location.is_none() {
-        vfy_core::selection::read_submodule_change(Path::new("."))
-            .map_err(PyRuntimeError::new_err)?
-    } else {
-        None
     };
     let snapshot = data.core_snapshot();
     let mut plan = vfy_core::selection::build_selection_plan_from_data(
@@ -386,11 +384,15 @@ pub(crate) fn git_replay_state(py: Python<'_>, ignored: Vec<String>) -> PyResult
         .map_err(PyRuntimeError::new_err)?;
     let result = PyDict::new(py);
     result.set_item("head", state.head)?;
-    result.set_item("clean", state.changed.is_empty())?;
+    result.set_item(
+        "clean",
+        state.changed.is_empty() && state.submodule_change.is_none(),
+    )?;
     result.set_item("changed", state.changed)?;
     result.set_item("untracked", state.untracked)?;
     result.set_item("deleted", state.deleted)?;
     result.set_item("patch", state.patch)?;
+    result.set_item("submodule_change", state.submodule_change)?;
     Ok(result.into_any().unbind())
 }
 

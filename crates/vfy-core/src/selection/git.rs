@@ -11,6 +11,7 @@ pub struct GitReplayState {
     pub untracked: bool,
     pub deleted: bool,
     pub patch: String,
+    pub submodule_change: Option<String>,
 }
 
 struct GitOutputs {
@@ -140,13 +141,7 @@ fn git_outputs_at(directory: &Path) -> Result<GitOutputs, String> {
 pub fn read_git_replay_state(ignored: &[String]) -> Result<GitReplayState, String> {
     let directory = std::env::current_dir()
         .map_err(|error| format!("failed to read current directory: {error}"))?;
-    let GitOutputs {
-        root,
-        head,
-        status,
-        patch,
-    } = git_outputs_at(&directory)?;
-    replay_state_from_outputs(&directory, &root, &head, &status, &patch, ignored)
+    read_git_replay_state_at(&directory, ignored)
 }
 
 /// Read replay state from the specified repository directory.
@@ -198,10 +193,16 @@ pub fn read_green_git_head_at(
             return Err(git_failure(operation, result));
         }
     }
-    Ok(status_changes(directory, &root, &status.stdout, ignored)
+    if !status_changes(directory, &root, &status.stdout, ignored)
         .changed
         .is_empty()
-        .then(|| String::from_utf8_lossy(&head.stdout).trim().to_owned()))
+        || submodule_change_at_root(&root)?.is_some()
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&head.stdout).trim().to_owned(),
+    ))
 }
 
 fn replay_state_from_outputs(
@@ -228,6 +229,7 @@ fn replay_state_from_outputs(
         untracked: changes.untracked,
         deleted: changes.deleted,
         patch: String::from_utf8_lossy(&patch.stdout).into_owned(),
+        submodule_change: submodule_change_at_root(root)?,
     })
 }
 
@@ -296,12 +298,7 @@ pub(crate) enum IndexEntry {
     Submodule { commit: String },
 }
 
-/// Read the Git index of the repository at `root`.
-///
-/// # Errors
-/// Returns an error when Git cannot be launched, fails, or prints an
-/// unexpected record.
-pub(crate) fn read_index(root: &Path) -> Result<BTreeMap<String, IndexEntry>, String> {
+fn read_submodule_index(root: &Path) -> Result<BTreeMap<String, IndexEntry>, String> {
     let result = output(
         Command::new("git")
             .current_dir(root)
@@ -311,7 +308,12 @@ pub(crate) fn read_index(root: &Path) -> Result<BTreeMap<String, IndexEntry>, St
     if !result.status.success() {
         return Err(git_failure("read the Git index", &result));
     }
-    parse_index(&result.stdout)
+    parse_index_records(
+        result
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|record| record.starts_with(b"160000 ")),
+    )
 }
 
 /// Parse `git ls-files --stage -z` records: `<mode> <object> <stage>\t<path>`.
@@ -319,11 +321,18 @@ pub(crate) fn read_index(root: &Path) -> Result<BTreeMap<String, IndexEntry>, St
 /// An unmerged path has one record per stage and keeps its last record;
 /// [`submodule_change`] reports a submodule merge conflict separately.
 pub(crate) fn parse_index(output: &[u8]) -> Result<BTreeMap<String, IndexEntry>, String> {
+    parse_index_records(
+        output
+            .split(|byte| *byte == 0)
+            .filter(|record| !record.is_empty()),
+    )
+}
+
+fn parse_index_records<'a>(
+    records: impl Iterator<Item = &'a [u8]>,
+) -> Result<BTreeMap<String, IndexEntry>, String> {
     let mut entries = BTreeMap::new();
-    for record in output
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty())
-    {
+    for record in records {
         let invalid = || {
             format!(
                 "unexpected Git index record {:?}",
@@ -358,14 +367,19 @@ pub(crate) fn parse_index(output: &[u8]) -> Result<BTreeMap<String, IndexEntry>,
     Ok(entries)
 }
 
-/// Explain why the submodules of the repository containing `directory` require
-/// a full run, or return `None` when every submodule matches its recorded commit.
+/// Explain why submodules require a full run when Git can resolve the working tree.
 ///
 /// # Errors
-/// Returns an error when Git cannot be launched or any command fails.
+/// Returns an error if the resolved repository's submodule status is unavailable.
 pub fn read_submodule_change(directory: &Path) -> Result<Option<String>, String> {
-    let root = repository_root(directory)?;
-    submodule_change(&root, &read_index(&root)?)
+    let Ok(root) = repository_root(directory) else {
+        return Ok(None);
+    };
+    submodule_change_at_root(&root)
+}
+
+fn submodule_change_at_root(root: &Path) -> Result<Option<String>, String> {
+    submodule_change(root, &read_submodule_index(root)?)
 }
 
 /// Explain why the checked-out submodules cannot stand for their recorded commits.
@@ -377,7 +391,7 @@ pub fn read_submodule_change(directory: &Path) -> Result<Option<String>, String>
 ///
 /// # Errors
 /// Returns an error when Git cannot be launched or the status command fails.
-pub(crate) fn submodule_change(
+pub(super) fn submodule_change(
     root: &Path,
     index: &BTreeMap<String, IndexEntry>,
 ) -> Result<Option<String>, String> {

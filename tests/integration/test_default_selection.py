@@ -516,6 +516,7 @@ def test_submodule_selects_by_recorded_commit_and_runs_everything_when_it_differ
     def run(*arguments: str) -> CommandResult:
         return project.run_vfy("test", "--engine=native", *arguments, *_ARGUMENTS)
 
+    project.run("git", "config", "submodule.data.ignore", "all").expect(0)
     complete = run("--all")
     complete.expect(0)
     assert "2 passed" in complete.stdout
@@ -539,3 +540,38 @@ def test_submodule_selects_by_recorded_commit_and_runs_everything_when_it_differ
     assert "2 passed" in changed.stdout
     assert _FULL in changed.stderr
     assert reason in changed.stderr
+
+
+def test_uninitialized_submodule_cannot_seed_replay(tmp_path: Path) -> None:
+    origin = VfyProject(tmp_path / "origin")
+    origin.write("value.txt", "2\n")
+    origin.git_init()
+    project = _project(tmp_path / "project")
+    project.write(
+        "tests/test_b.py",
+        "from pathlib import Path\n\n"
+        "def test_b():\n"
+        "    path = Path('data/value.txt')\n"
+        "    assert not path.exists() or path.read_text() == '1\\n'\n",
+    )
+    project.run(
+        "git",
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(origin.root),
+        "data",
+    ).expect(0)
+    project.git_commit("Add a data submodule")
+    project.run("git", "submodule", "deinit", "-q", "-f", "data").expect(0)
+    project.run_vfy("test", "--engine=pytest-native", "--all", *_ARGUMENTS).expect(0)
+    project.run(
+        "git", "-c", "protocol.file.allow=always", "submodule", "update", "--init", "-q"
+    ).expect(0)
+
+    result = project.run_vfy("test", "--engine=pytest-native", *_ARGUMENTS)
+
+    result.expect(1)
+    assert "test_b" in result.stdout

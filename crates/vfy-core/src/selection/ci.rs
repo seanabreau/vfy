@@ -243,15 +243,15 @@ fn export_digests(
 pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
     let root = repository_root()?;
     let state = read_git_replay_state(request.ignored).map_err(invalid)?;
-    if !state.changed.is_empty() {
-        return Err(invalid("baseline export requires a clean checkout"));
-    }
-    let index = tracked_files(&root)?;
-    if let Some(reason) = submodule_change(&root, &index).map_err(invalid)? {
+    if let Some(reason) = state.submodule_change {
         return Err(invalid(format!(
             "baseline export requires a clean checkout: {reason}"
         )));
     }
+    if !state.changed.is_empty() {
+        return Err(invalid("baseline export requires a clean checkout"));
+    }
+    let index = tracked_files(&root)?;
     let source_digests = export_digests(&root, &index)?;
     let tracked: BTreeSet<_> = source_digests.keys().cloned().collect();
     let collected: Vec<String> = read_json(request.collection_path)?;
@@ -330,7 +330,15 @@ pub fn export_baseline(request: BaselineExport<'_>) -> Result<(), CoreError> {
     };
     bundle.import_graph.validate(&tracked)?;
     // Source may change while the bundle is assembled.
-    for (path, entry) in &index {
+    let current = tracked_files(&root)?;
+    if current != index
+        || submodule_change(&root, &current)
+            .map_err(invalid)?
+            .is_some()
+    {
+        return Err(invalid("source changed during baseline export"));
+    }
+    for (path, entry) in &current {
         if tracked_digest(&root, path, entry)? != bundle.source_digests[path] {
             return Err(invalid("source changed during baseline export"));
         }
@@ -490,8 +498,8 @@ fn eligible_changes(
             "added, deleted, renamed, or untracked inputs require a full run".to_owned(),
         ));
     }
-    if let Some(reason) = submodule_change(root, &tracked).map_err(invalid)? {
-        return Ok(Err(reason));
+    if let Some(reason) = &state.submodule_change {
+        return Ok(Err(reason.clone()));
     }
     let statuses = git(
         root,
@@ -959,7 +967,7 @@ pub fn plan_source_current(path: &Path, ignored: &[String]) -> Result<bool, Core
     };
     Ok(source_identity(&root, &files)? == plan.source_identity
         && state.head == plan.target_commit
-        && (plan.selection.fallback_full || !state.untracked))
+        && (plan.selection.fallback_full || (!state.untracked && state.submodule_change.is_none())))
 }
 
 /// Persist an explicit full-suite decision.
