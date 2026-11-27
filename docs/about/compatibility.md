@@ -111,6 +111,9 @@ Native behavior and limits:
 - Custom collectors keep their function-generation methods. Package xunit hooks
   share pytest's owner lifetimes. Faulthandler timeouts and deferred thread
   exceptions take part in native lifecycles.
+- The independent engine collects and runs a custom `pytest.Item` returned
+  directly by `pytest_collect_file`, as pytest-checkdocs does. To select the
+  item by file path, its `path` must match the requested file, as in pytest.
 - `--engine=pytest-native` supports plain conftest setup and teardown hooks and rejects
   phase hook wrappers. `vfy diagnostics --engine=pytest-native` identifies literal
   wrapper declarations and `specname` aliases without importing project code.

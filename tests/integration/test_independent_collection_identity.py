@@ -652,6 +652,71 @@ def pytest_sessionfinish():
     assert json.loads((tmp_path / "events.json").read_text()) == expected
 
 
+def test_file_hook_can_return_an_item_directly(tmp_path: Path) -> None:
+    for engine in ("stock", "native"):
+        project = VfyProject(tmp_path / engine)
+        project.write("pytest.ini", "[pytest]\n")
+        project.write("README.case", "content\n")
+        project.write("project.case", "metadata\n")
+        project.write("test_regular.py", "def test_regular(): pass\n")
+        project.write(
+            "conftest.py",
+            """from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(scope='module', autouse=True)
+def module_fixture(request):
+    assert request.node.path.name == 'test_regular.py'
+
+
+class DirectItem(pytest.Item):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.fixturenames = ['module_fixture']
+
+    def runtest(self):
+        assert self.fixturenames == ['module_fixture']
+        with Path('executed').open('a', encoding='utf-8') as stream:
+            stream.write(self.nodeid + '\\n')
+
+
+def pytest_collect_file(file_path, parent):
+    if file_path.name == 'README.case':
+        return DirectItem.from_parent(parent, name=file_path.name, path=file_path)
+    if file_path.name == 'project.case':
+        return DirectItem.from_parent(parent, name=file_path.name)
+""",
+        )
+
+        collected = project.run_engine(engine, "-q", "--collect-only", env=_ENVIRONMENT)
+        collected.expect(0)
+        assert collected.stdout.splitlines()[:3] == [
+            ".::README.case",
+            ".::project.case",
+            "test_regular.py::test_regular",
+        ]
+        executed = project.root / "executed"
+        assert not executed.exists()
+
+        result = project.run_engine(engine, "-q", "README.case", env=_ENVIRONMENT)
+        result.expect(0)
+        assert "1 passed" in result.stdout
+        assert executed.read_text(encoding="utf-8").splitlines() == [".::README.case"]
+        executed.unlink()
+
+        project.run_engine(engine, "-q", "project.case", env=_ENVIRONMENT).expect(4)
+
+        result = project.run_engine(engine, "-q", env=_ENVIRONMENT)
+        result.expect(0)
+        assert "3 passed" in result.stdout
+        assert executed.read_text(encoding="utf-8").splitlines() == [
+            ".::README.case",
+            ".::project.case",
+        ]
+
+
 def test_unowned_item_in_collection_hook_is_rejected(tmp_path: Path) -> None:
     project = VfyProject(tmp_path)
     project.write(

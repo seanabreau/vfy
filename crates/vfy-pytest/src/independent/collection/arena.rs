@@ -30,7 +30,7 @@ pub(in crate::independent) enum CollectionNodeKind {
     Function,
     /// A collector returned by a `pytest_collect_file` hook or `Collector.collect()`.
     CustomCollector,
-    /// An item returned by a custom collector's `collect()`.
+    /// An item returned by a file hook or a custom collector's `collect()`.
     CustomItem,
 }
 
@@ -348,6 +348,19 @@ impl NativeCollectionArena {
         id: CollectionNodeId,
     ) -> PyResult<CollectionNodeKind> {
         Ok(self.node(id)?.kind)
+    }
+
+    /// Direct file-hook items sit below a directory instead of a custom collector.
+    pub(in crate::independent) fn is_file_hook_item(&self, id: CollectionNodeId) -> PyResult<bool> {
+        let node = self.node(id)?;
+        let Some(parent) = node.parent else {
+            return Ok(false);
+        };
+        Ok(node.kind == CollectionNodeKind::CustomItem
+            && matches!(
+                self.kind(parent)?,
+                CollectionNodeKind::Directory | CollectionNodeKind::Package
+            ))
     }
 
     pub(in crate::independent) fn lineage(
