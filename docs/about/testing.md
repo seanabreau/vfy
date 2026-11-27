@@ -299,6 +299,14 @@ Datasette's measured-file rejection requires `datasette/utils/shutil_backport.py
 to be the only extra file in vfy's report. The pinned `.coveragerc` omits this
 file, but vfy measures it when a child process starts outside the project root.
 
+A native test runner job builds a release wheel from the workflow revision and
+compares the configured Click and Starlette suites on CPython 3.13. It requires
+passing runs with matching exit status, outcome counts, and ordered JUnit cases
+under stock pytest and `vfy test --engine=native --no-cov`. Both runs use the
+same project environment with its installed test dependencies, including
+Starlette's AnyIO plug-in. The `native-projects` artifact retains the wheel,
+resolved dependencies, and results for both commands.
+
 The workflow does not block releases. A case can become a required CI check
 after its expected behavior and comparison method are reviewed.
 
