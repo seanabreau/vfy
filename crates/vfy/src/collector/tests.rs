@@ -9,7 +9,7 @@ fn coverage_globs_span_path_separators() {
 }
 
 #[test]
-fn source_include_and_omit_filters_are_composed() {
+fn source_overrides_include_and_preserves_omit() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("source");
     std::fs::create_dir_all(source.join("generated")).unwrap();
@@ -36,7 +36,7 @@ fn source_include_and_omit_filters_are_composed() {
     assert!(
         registry
             .resolve_filename(&source.join("module.rs").to_string_lossy())
-            .is_none()
+            .is_some()
     );
     assert!(
         registry

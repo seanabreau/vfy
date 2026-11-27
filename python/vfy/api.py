@@ -381,6 +381,8 @@ class Coverage:
         ):
             self.data.read()
         collector = self._new_collector()
+        if self.include and (self.source or self.source_pkgs):
+            self._warn("--include is ignored because --source is set", "include-ignored")
         collector.start()
         try:
             self._install_process_hooks()

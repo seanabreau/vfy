@@ -33,12 +33,17 @@ pass through unchanged. Existing Coverage.py jobs can replace `coverage` with
 
 ### Choose files and collection mode
 
-`--source` includes unexecuted source files in reports; repeat it for more roots.
-Narrow paths with glob filters:
+`--source` includes unexecuted source files in reports. Repeat it for more
+roots and use `--omit` to exclude files within those roots.
 
 ```console
-uv run vfy coverage run --source src --include '*/service/*.py' --omit '*/generated/*' -m pytest
+uv run vfy coverage run --source src --omit '*/generated/*' -m pytest
 ```
+
+To select executed files by glob, use `--include` on its own. When both
+`--source` and `--include` are set for collection, `--source` takes precedence
+and vfy emits the `include-ignored` warning. You can still use `--include` on
+a later report to narrow its output.
 
 Without an explicit source or include filter, vfy skips the standard library
 and installed packages. `[run] cover_pylib = true` or the Python API's

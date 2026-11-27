@@ -77,9 +77,9 @@ workers = 1
 | `cover_pylib` | boolean | Without a source filter, also measure the Python installation's standard library; the `Coverage(cover_pylib=...)` argument overrides it |
 | `core` | `sysmon`, `ctrace`, or `pytrace` | Accepted as a tracer preference; collection always uses `sys.monitoring`, which also records dynamic contexts. Other values are rejected |
 | `data_file` | path | Main data-file basename |
-| `disable_warnings` | list of warning names | Accepted; vfy emits none of Coverage.py's named warnings, so there is nothing to suppress |
+| `disable_warnings` | list of warning names | Suppress the listed collection warnings, such as `include-ignored` or `no-data-collected` |
 | `dynamic_context` | `test_function` or `none` | `test_function` records each `test*` or `runTest` function's lines under its qualified name, such as `tests.test_app.TestApp.test_save`. A context starts only while no dynamic context is active on that thread and ends when that function returns or yields. This switcher runs before dynamic-context plug-ins. `none` disables the built-in switcher |
-| `include` | list of globs | Include canonical paths |
+| `include` | list of globs | Include matching paths. If `source` or `source_pkgs` is set, it takes precedence and collection emits the `include-ignored` warning |
 | `omit` | list of globs | Exclude matching files from collection, including unexecuted files under a source root |
 | `parallel` | boolean | Write process-specific shards when collection starts |
 | `patch` | list | Accepts `subprocess`, which enables automatic Python child collection, and `_exit`, which saves data before `os._exit()`, including stopped instances. The `_exit` hook remains installed for the process lifetime; save errors preserve the requested exit status. `execv` and `fork` are rejected, including through `Coverage.set_option()`. |

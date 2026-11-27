@@ -190,7 +190,7 @@ matching schema number is not enough.
 | --- | --- |
 | Line and branch collection matching Coverage.py's default core | Targets Coverage.py’s default core |
 | Multiline branch destinations and active snapshots | Supported |
-| Source, include, and omit composition | Supported |
+| Collection file filters | `source` and `source_pkgs` take precedence over `[run] include` and emit the suppressible `include-ignored` warning when both filters are configured. `[run] omit` still excludes matching files. |
 | Threads and interleaved generators | Supported |
 | `[run] dynamic_context` | `test_function` and `none`; Coverage.py 7.15.4 differentials cover qualified names, switcher ordering, nesting, generator resumption, exceptions, and overlapping threads |
 | Same-line loops, exhausted and early-closed generators | Supported |

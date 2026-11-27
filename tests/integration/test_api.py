@@ -1239,7 +1239,7 @@ def test_unsupported_api_arguments_fail_instead_of_being_ignored() -> None:
         CoverageData(unsupported_option=True)  # ty: ignore[unknown-argument] - exercise runtime rejection
 
 
-def test_rust_collection_composes_source_include_and_omit(tmp_path: Path) -> None:
+def test_rust_collection_composes_source_and_omit(tmp_path: Path) -> None:
     keep = tmp_path / "keep.py"
     omit = tmp_path / "omit.py"
     outside = tmp_path.parent / "outside.py"
@@ -1249,7 +1249,6 @@ def test_rust_collection_composes_source_include_and_omit(tmp_path: Path) -> Non
     coverage = Coverage(
         data_file=None,
         source=[str(tmp_path)],
-        include=["*.py"],
         omit=["*/omit.py"],
     )
     coverage.start()

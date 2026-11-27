@@ -1174,10 +1174,11 @@ impl CodeRegistry {
                     .as_ref()
                     .is_some_and(|relative| patterns.is_match(relative))
         };
-        if self
-            .include
-            .as_ref()
-            .is_some_and(|patterns| !matches(patterns))
+        if (!has_sources
+            && self
+                .include
+                .as_ref()
+                .is_some_and(|patterns| !matches(patterns)))
             || self.omit.as_ref().is_some_and(matches)
         {
             return None;
