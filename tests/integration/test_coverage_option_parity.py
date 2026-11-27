@@ -185,3 +185,85 @@ def test_report_omit_comes_from_the_report_section_like_coverage_py(
     actual = project.run_vfy("coverage", "report")
 
     assert (actual.returncode, actual.stdout) == (expected.returncode, expected.stdout)
+
+
+@pytest.mark.parametrize("entry_point", ["cli", "pytest"])
+@pytest.mark.parametrize("warning", ["default", "suppressed", "error"])
+def test_source_takes_precedence_over_run_include(
+    tmp_path: Path, entry_point: str, warning: str
+) -> None:
+    project = VfyProject(tmp_path)
+    for name in ("left", "right"):
+        project.write(f"lib/{name}.py", "value = 1\n")
+    project.write(
+        "test_run.py",
+        "from lib import left, right\ndef test_values():\n    assert left.value == right.value\n",
+    )
+    settings = "[run]\nsource = lib\ninclude = lib/left.py\n"
+    if warning == "suppressed":
+        settings += "disable_warnings = include-ignored\n"
+    project.write(".coveragerc", settings)
+
+    for module, plugin in (("coverage", "pytest_cov.plugin"), ("vfy", "vfy.pytest_plugin")):
+        database = f".{module}.db"
+        env = {
+            "COVERAGE_FILE": database,
+            "PYTHONWARNINGS": "default" if warning == "default" else "error",
+        }
+        cli = ("-m", "coverage") if module == "coverage" else ("-m", "vfy", "coverage")
+        if entry_point == "cli":
+            result = project.run_python(*cli, "run", "test_run.py", env=env)
+        else:
+            result = project.run_python("-m", "pytest", "-p", plugin, "--cov", "-q", env=env)
+
+        result.expect(1 if warning == "error" else 0)
+        diagnostic = (
+            "CoverageWarning: --include is ignored because --source is set (include-ignored)"
+        )
+        stream = result.stderr if entry_point == "cli" or warning == "error" else result.stdout
+        assert stream.count(diagnostic) == (0 if warning == "suppressed" else 1)
+        if warning == "error":
+            assert not (tmp_path / database).exists()
+        else:
+            assert project.lines("lib/left.py", database) == [1]
+            assert project.lines("lib/right.py", database) == [1]
+            report = project.run_python(*cli, "report", "--format=total", env=env).expect(0)
+            assert report.stdout.strip() == "100"
+
+
+def test_include_ignored_warning_preserves_the_active_collector(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write(".coveragerc", "[run]\nsource_pkgs = lib\ninclude = lib/left.py\n")
+    project.write("lib/left.py", "value = 1\n")
+    project.write("lib/right.py", "value = 2\n")
+    project.write(
+        "run.py",
+        "import importlib, sys, warnings\n"
+        "module = importlib.import_module(sys.argv[1])\n"
+        "cov = module.Coverage(data_file=sys.argv[2])\n"
+        "with warnings.catch_warnings():\n"
+        "    warnings.simplefilter('ignore')\n"
+        "    cov.start()\n"
+        "try:\n"
+        "    import lib.left\n"
+        "    cov.set_option('run:include', [])\n"
+        "    try:\n"
+        "        cov.start()\n"
+        "    except Warning as error:\n"
+        "        print(type(error).__name__, str(error).partition(';')[0])\n"
+        "    assert module.Coverage.current() is cov\n"
+        "    import lib.right\n"
+        "finally:\n"
+        "    cov.stop()\n"
+        "assert module.Coverage.current() is None\n"
+        "cov.save()\n",
+    )
+
+    for module in ("coverage", "vfy"):
+        database = f".{module}.db"
+        result = project.run_python("run.py", module, database, env={"PYTHONWARNINGS": "error"})
+        assert result.expect(0).stdout.strip() == (
+            "CoverageWarning --include is ignored because --source is set (include-ignored)"
+        )
+        assert project.lines("lib/left.py", database) == [1]
+        assert project.lines("lib/right.py", database) == [1]

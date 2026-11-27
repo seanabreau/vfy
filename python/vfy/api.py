@@ -364,23 +364,27 @@ class Coverage:
             validate_run_patch(self._options["run:patch"])
         except ValueError as exc:
             raise ConfigError(str(exc)) from exc
-        if self._collector is not None and not self._collection_invalidated:
+        collector = None if self._collection_invalidated else self._collector
+        if collector is None:
+            self._data_initialized = True
+            if not self._start_options_initialized:
+                self._sigterm = bool(self._options["run:sigterm"])
+            if self._suffix_on_start:
+                self._suffix_on_start = False
+                self.data._use_suffix(True)
+            if (
+                self.data._path_aliases
+                and not self.data
+                and not self.data._no_disk
+                and Path(self.data.data_filename()).exists()
+            ):
+                self.data.read()
+            collector = self._new_collector()
+        if collector.include_ignored:
+            self._warn("--include is ignored because --source is set", "include-ignored")
+        if collector is self._collector:
             self._install_process_hooks()
             return
-        self._data_initialized = True
-        if not self._start_options_initialized:
-            self._sigterm = bool(self._options["run:sigterm"])
-        if self._suffix_on_start:
-            self._suffix_on_start = False
-            self.data._use_suffix(True)
-        if (
-            self.data._path_aliases
-            and not self.data
-            and not self.data._no_disk
-            and Path(self.data.data_filename()).exists()
-        ):
-            self.data.read()
-        collector = self._new_collector()
         collector.start()
         try:
             self._install_process_hooks()
