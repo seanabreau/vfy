@@ -19,6 +19,7 @@ from vfy._version import __version__
 from .facade import install_pytest_facade
 from .imports import install_import_hook
 from .outcomes import install_outcome_modules
+from .startup_diagnostics import publish_startup_error
 from .worker import run_parallel, run_worker
 
 if TYPE_CHECKING:
@@ -150,6 +151,7 @@ def main(
                 )
             # The session handler already recorded an exit status; report the error and return it.
             except BaseException as error:
+                plugin_notes = publish_startup_error(error)
                 if owner.disposition != "return" or owner.exitstatus is None:
                     raise
                 if isinstance(
@@ -157,6 +159,8 @@ def main(
                     (native._pytest.IndependentUsageError, native._pytest.UnsupportedFeatureError),
                 ):
                     sys.stderr.write(f"vfy independent usage error: {error}\n")
+                    for note in plugin_notes:
+                        sys.stderr.write(f"{note}\n")
                 else:
                     _report_startup_error(error)
                 return owner.exitstatus

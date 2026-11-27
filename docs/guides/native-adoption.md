@@ -98,6 +98,11 @@ plug-in that implements a hook the engine does not run stops the session with a
 usage error that names the hook and the plug-in; block it with `-p no:NAME` or
 keep pytest as the runner, as shown above.
 
+If an installed entry-point plug-in raises during import, registration, or a
+startup hook, `vfy test` and `vfy diagnostics --collect` show the distribution,
+version, entry point, and underlying error. Use the stock pytest command above
+to keep the plug-in active and collect coverage with vfy.
+
 With `--engine=pytest-native`, vfy disables general plug-in autoloading and
 loads its supported adapters. It also loads an installed plug-in when a static
 scan of its module finds only fixtures and hooks that native execution runs

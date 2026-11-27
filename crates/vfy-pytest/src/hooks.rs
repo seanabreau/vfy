@@ -20,6 +20,7 @@ mod result;
 mod selection;
 mod signature;
 mod specification;
+mod startup;
 
 use discovery::{implementation, metadata};
 pub(crate) use multicall::NativeHookDefault;

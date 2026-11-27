@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol
 
 from vfy._pytest.plugin_support import disable_plugin_autoload
 from vfy.errors import VfyError
+from vfy.independent.startup_diagnostics import startup_error_marker
 from vfy.native import record_test_execution
 
 from .confirmation import _confirmation_message, _confirmation_pytest_args
@@ -156,7 +157,10 @@ def _record_execution_evidence(
         return False
     if (
         getattr(args, "_test_engine", "pytest-native") in {"pytest-native", "native"}
-        and completed in {2, 3, 4, 5, -signal.SIGINT}
+        and (
+            completed in {2, 3, 4, 5, -signal.SIGINT}
+            or (completed == 1 and startup_error_marker(primary_result_path).is_file())
+        )
         and not primary_result_path.exists()
     ):
         # Pytest already reported why collection, interruption, an internal

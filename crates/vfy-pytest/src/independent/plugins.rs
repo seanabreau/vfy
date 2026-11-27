@@ -1,5 +1,6 @@
 //! Native plugin activation over `CPython`'s standard distribution metadata protocol.
 use super::Collector;
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 
 mod arguments;
@@ -500,11 +501,12 @@ impl<'py> Collector<'py> {
                 .getattr("_plugin_aliases")?
                 .set_item(REPORTING_ADAPTER, "html")?;
         }
-        if let Some(context) = &self.context {
-            context.register(self.py, plugin.clone().unbind(), name)?;
-        }
         if let (Some(distribution), Some(manager)) = (distribution, manager) {
-            record_admitted_distribution(&manager, &plugin, distribution.bind(self.py))?;
+            let distribution = distribution.bind(self.py);
+            manager.call_method1("_register_entry_point", (&plugin, name, distribution))?;
+            record_admitted_distribution(&manager, &plugin, distribution)?;
+        } else if let Some(context) = &self.context {
+            context.register(self.py, plugin.clone().unbind(), name)?;
         }
         self.load_declared_plugins(&plugin)
     }
@@ -583,10 +585,23 @@ impl<'py> Collector<'py> {
             self.py
                 .import("vfy.independent.imports")?
                 .call_method1("register_assert_rewrite", (module,))?;
-            (
-                entry.bind(self.py).call_method0("load")?,
-                Some(distribution),
-            )
+            let plugin = entry
+                .bind(self.py)
+                .call_method0("load")
+                .inspect_err(|error| {
+                    if error.is_instance_of::<PyException>(self.py) {
+                        let _ = self
+                            .py
+                            .import("vfy.independent.startup_diagnostics")
+                            .and_then(|diagnostics| {
+                                diagnostics.call_method1(
+                                    "note_entry_point_error",
+                                    (error.value(self.py), &distribution, &entry, "import"),
+                                )
+                            });
+                    }
+                })?;
+            (plugin, Some(distribution))
         } else {
             // With no admitted CodSpeed distribution, preserve the explicit
             // module spelling so the import failure names the missing package.

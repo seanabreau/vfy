@@ -138,6 +138,11 @@ are documented under [Workers](../guides/run-tests.md#workers).
 
 The supported runtime plug-ins are listed below.
 
+If a pytest entry point raises during native startup, `vfy test` and
+`vfy diagnostics --collect` identify the distribution, version, entry point,
+and underlying exception. Follow the printed pytest command to keep using
+that plug-in with vfy coverage.
+
 The optional pytest-mock adapter supports the upstream fixture and configuration
 hooks. See [loading instructions](../guides/native-adoption.md#use-pytest-mock-fixtures).
 The compatibility script runs pytest-mock 3.13.0, 3.14.0, 3.15.0, 3.16.0, and 3.15.1

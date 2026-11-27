@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, TypedDict, cast
 from ._pytest.collection_readiness import MISSING_FIXTURES_PREFIX, UNSUPPORTED_ITEMS_PREFIX
 from ._version import __version__
 from .errors import VfyError
+from .independent.startup_diagnostics import KEEP_PLUGIN_WITH_PYTEST
 from .native import (
     build_profile,
     coverage_uses_sysmon_branch_arcs,
@@ -520,7 +521,11 @@ def _diagnostics_collect(pytest_args: list[str], *, engine: str) -> dict[str, ob
     summary_lines = [
         line
         for line in (*stdout.splitlines(), *stderr.splitlines())
-        if ("collected" in line.lower() or "error" in line.lower())
+        if (
+            "collected" in line.lower()
+            or "error" in line.lower()
+            or KEEP_PLUGIN_WITH_PYTEST in line
+        )
         and not _COLLECTED_NODE_ID.match(line)
     ]
     unsupported_items = any(

@@ -15,6 +15,7 @@ from collections.abc import (
     MutableMapping,
     Sequence,
 )
+from contextlib import suppress
 from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
@@ -34,6 +35,7 @@ from .facade import (
     skip as skip_test,
 )
 from .fixtures import FuncFixtureInfo
+from .startup_diagnostics import note_distribution_error
 from .stash import Stash
 
 type IniDeclaration = tuple[str, object, tuple[str, ...]]
@@ -237,6 +239,7 @@ class PluginManager:
         self.trace = registry.trace
         self.project_name = registry.project_name
         self._plugin_distinfo: list[tuple[object, importlib.metadata.Distribution]] = []
+        self._registering_distinfo: tuple[object, importlib.metadata.Distribution] | None = None
         self._plugin_aliases: dict[str, str] = {}
 
     def list_plugin_distinfo(self) -> list[tuple[object, object]]:
@@ -256,12 +259,32 @@ class PluginManager:
         return self._native.enable_tracing()
 
     def register(self, plugin: object, name: str | None = None) -> str | None:
-        registered = self._native.register_compatible(plugin, name)
+        try:
+            registered = self._native.register_compatible(plugin, name)
+        except Exception as error:
+            pending = self._registering_distinfo
+            if pending is not None and pending[0] is plugin and name is not None:
+                # Preserve the registration error if enrichment also fails.
+                with suppress(Exception):
+                    note_distribution_error(error, pending[1], name, "registration")
+            raise
         if registered is not None:
             self.hook.pytest_plugin_registered.call_historic(
                 kwargs={"plugin": plugin, "plugin_name": registered, "manager": self}
             )
         return registered
+
+    def _register_entry_point(
+        self, plugin: object, name: str, distribution: importlib.metadata.Distribution
+    ) -> None:
+        # Historic hooks can fail while registration is in progress. Pytest
+        # only publishes its distribution list after registration succeeds.
+        previous = self._registering_distinfo
+        self._registering_distinfo = (plugin, distribution)
+        try:
+            self.register(plugin, name)
+        finally:
+            self._registering_distinfo = previous
 
     def unregister(self, plugin: object | None = None, name: str | None = None) -> object | None:
         resolved = None if name is None else self._plugin_aliases.get(name, name)

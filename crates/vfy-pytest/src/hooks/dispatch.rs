@@ -1,6 +1,7 @@
 //! Pluggy's `_multicall` over one ordered method list, including wrapper teardown.
 
 use super::invocation::{CallArguments, HookReturn};
+use super::startup;
 use super::{
     HookArguments, HookBody, Implementation, NativeHookRegistry, NativeHookResult,
     PluggyTeardownRaisedWarning, Style,
@@ -75,11 +76,15 @@ enum Teardown {
         call: Py<PyAny>,
     },
     /// A new-style wrapper generator, resumed with the call's result or exception.
-    Wrapper(Py<PyAny>),
+    Wrapper {
+        generator: Py<PyAny>,
+        startup: Option<Py<Implementation>>,
+    },
     /// An old-style hookwrapper generator, which receives a `NativeHookResult`.
     Legacy {
         generator: Py<PyAny>,
         plugin_name: String,
+        startup: Option<Py<Implementation>>,
     },
 }
 
@@ -253,8 +258,12 @@ pub(super) fn run_arguments<'py>(
         HookResults::All(Some(values)) => HookReturn::Python(values.clone_ref(py).into_any()),
         HookResults::All(None) => HookReturn::EmptyList,
     };
-    while let Some(teardown) = teardowns.pop() {
+    while let Some(mut teardown) = teardowns.pop() {
         let thrown = exception.as_ref().map(|error| error.clone_ref(py));
+        let startup = match &mut teardown {
+            Teardown::Wrapper { startup, .. } | Teardown::Legacy { startup, .. } => startup.take(),
+            _ => None,
+        };
         let settled = match teardown {
             Teardown::SkippingCall(item) => {
                 let finish = (|| -> PyResult<()> {
@@ -393,7 +402,7 @@ pub(super) fn run_arguments<'py>(
                     }
                 }
             }
-            Teardown::Wrapper(generator) => {
+            Teardown::Wrapper { generator, .. } => {
                 let input = if thrown.is_some() {
                     Ok(py.None())
                 } else {
@@ -407,6 +416,7 @@ pub(super) fn run_arguments<'py>(
             Teardown::Legacy {
                 generator,
                 plugin_name,
+                ..
             } => {
                 let input = match &thrown {
                     Some(error) => Err(error.clone_ref(py)),
@@ -425,6 +435,14 @@ pub(super) fn run_arguments<'py>(
                 }
             }
         };
+        if let (Some(implementation), Settled::Raised(error) | Settled::SecondYield(error)) =
+            (&startup, &settled)
+            && thrown
+                .as_ref()
+                .is_none_or(|thrown| !error.value(py).is(thrown.bind(py)))
+        {
+            startup::note_failure(py, implementation, arguments, error);
+        }
         match settled {
             Settled::Value(value) => {
                 result = value;
@@ -627,7 +645,7 @@ fn call_each<'py>(
             continue;
         }
         let names = implementation.get().borrow(py).arguments.clone_ref(py);
-        let arguments = Implementation::arguments(py, names.bind(py), arguments)?;
+        let callback_arguments = Implementation::arguments(py, names.bind(py), arguments)?;
         if let Some(count) = &implementation.get().borrow(py).invocation {
             count.increment()?;
         }
@@ -644,7 +662,7 @@ fn call_each<'py>(
                 },
             )
         };
-        match (body, &arguments) {
+        match (body, &callback_arguments) {
             (HookBody::SkippingCall, HookArguments::One(item)) => {
                 crate::independent::skipping::NativeSkippingHooks::call_start(item)?;
                 teardowns.push(Teardown::SkippingCall(item.clone().unbind()));
@@ -665,7 +683,12 @@ fn call_each<'py>(
             }
             _ => {}
         }
-        let returned = arguments.call(function.bind(py))?;
+        let note_failure = |error: &PyErr| {
+            startup::note_failure(py, implementation.get(), arguments, error);
+        };
+        let returned = callback_arguments
+            .call(function.bind(py))
+            .inspect_err(note_failure)?;
         match style {
             Style::Plain => {
                 if !returned.is_none() {
@@ -681,15 +704,20 @@ fn call_each<'py>(
                     }
                 }
             }
-            Style::Wrapper => {
-                start(&returned)?;
-                teardowns.push(Teardown::Wrapper(returned.unbind()));
-            }
-            Style::Legacy => {
-                start(&returned)?;
-                teardowns.push(Teardown::Legacy {
-                    generator: returned.unbind(),
-                    plugin_name,
+            Style::Wrapper | Style::Legacy => {
+                start(&returned).inspect_err(note_failure)?;
+                let startup =
+                    startup::startup_wrapper_unwind(&implementation.get().borrow(py).name)
+                        .then(|| implementation.get().clone_ref(py));
+                let generator = returned.unbind();
+                teardowns.push(if style == Style::Wrapper {
+                    Teardown::Wrapper { generator, startup }
+                } else {
+                    Teardown::Legacy {
+                        generator,
+                        plugin_name,
+                        startup,
+                    }
                 });
             }
         }
