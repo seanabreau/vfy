@@ -36,8 +36,8 @@ rotating order:
 .venv/bin/python validation/pytest_runner/benchmark_native_xdist.py \
     --wheel /path/to/vfy.whl --build-manifest /path/to/build.json \
     --project iniconfig --workers 4 --independent-workers 1 4 \
-    --timing-route stock-xdist-0 --timing-route independent-j1 \
-    --timing-route stock-xdist-4 --timing-route independent-j4 \
+    --timing-route stock-xdist-0 --timing-route native-j1 \
+    --timing-route stock-xdist-4 --timing-route native-j4 \
     --timed-evidence full --mode diagnostic --warmups 1 --runs 7 \
     --work-root /path/to/project-work --output /path/to/project-results
 ```

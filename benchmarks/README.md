@@ -107,8 +107,9 @@ validation stay outside the timers.
 
 ### Compare native workers with pytest-xdist
 
-Use `validation/pytest_runner/benchmark_native_xdist.py` with an identified
-release wheel and build manifest. The complete configured inventories are
+Use `validation/pytest_runner/benchmark_native_xdist.py` to compare the
+`pytest-native` engine with stock pytest-xdist. Supply a release wheel and its
+build manifest. The complete configured inventories are
 Rich (981 cases), attrs (1,412), Click (2,016), and Packaging (62,435). Prepare
 the pinned checkouts and resolved dependencies from
 `check_native_adoption_matrix.py`. Keep complete Git history and tags for
@@ -123,8 +124,8 @@ and JUnit reporting:
 "$VFY_BENCH_PYTHON" validation/pytest_runner/benchmark_native_xdist.py \
   --wheel "$VFY_BENCH_WHEEL" --build-manifest "$VFY_BENCH_MANIFEST" \
   --project rich --workers 0 4 --native-workers 4 \
-  --timing-route stock-xdist-4 --timing-route native-xdist-4 \
-  --timing-route native-j4 --rich-clock --capture=no \
+  --timing-route stock-xdist-4 --timing-route pytest-native-xdist-4 \
+  --timing-route pytest-native-j4 --rich-clock --capture=no \
   --override-upstream-capture --python-version 3.12 --tree-resources \
   --work-root "$VFY_BENCH_WORK/rich" --output "$VFY_BENCH_RESULTS/memory/rich" \
   --local-checkout "rich=$VFY_BENCH_UPSTREAM/rich" \
@@ -141,7 +142,7 @@ to `"$VFY_BENCH_RESULTS/timing-only/rich"`; keep its timing samples separate.
 ### Compare independent execution with pytest
 
 Use the same release wheel, build manifest, prepared locks, and complete project
-inventories with explicit `independent-jN` routes. This route uses vfy's own
+inventories with explicit `native-jN` routes. These routes use vfy's own
 pytest-compatible frontend and executor, which is also the default for `vfy test`
 regardless of whether pytest is installed.
 The harness selects `--engine=native` explicitly for these routes. For serial execution:
@@ -150,7 +151,7 @@ The harness selects `--engine=native` explicitly for these routes. For serial ex
 "$VFY_BENCH_PYTHON" validation/pytest_runner/benchmark_native_xdist.py \
   --wheel "$VFY_BENCH_WHEEL" --build-manifest "$VFY_BENCH_MANIFEST" \
   --project rich --workers 0 --independent-workers 1 \
-  --timing-route stock-xdist-0 --timing-route independent-j1 \
+  --timing-route stock-xdist-0 --timing-route native-j1 \
   --rich-clock --capture=no --override-upstream-capture --python-version 3.12 \
   --work-root "$VFY_BENCH_WORK/independent" \
   --output "$VFY_BENCH_RESULTS/independent-preflight" --validate-only
@@ -160,7 +161,7 @@ After validation, repeat without `--validate-only`, with a new output directory
 and `--warmups 3 --runs 15 --mode publication`. Repeat for `attrs`, `click`, and
 `packaging`. For equal four-worker commands, use `--workers 4
 --independent-workers 4`, `--timing-route stock-xdist-4`, and
-`--timing-route independent-j4`. Keep serial and parallel comparisons separate.
+`--timing-route native-j4`. Keep serial and parallel comparisons separate.
 
 The harness's optional `--native-scheduling=file|scope|cases|striped|demand` selects the
 shared worker scheduler for both native and independent routes. Omission leaves

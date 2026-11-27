@@ -1119,7 +1119,7 @@ def main() -> int:
         type=int,
         nargs="+",
         default=[],
-        help="enable independent-jN routes; compare j1 with serial pytest and jN with xdist N",
+        help="enable native-jN routes, pairing j1 with serial pytest and jN with xdist N",
     )
     parser.add_argument(
         "--native-direct-workers",
