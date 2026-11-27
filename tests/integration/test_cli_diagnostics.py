@@ -1066,9 +1066,20 @@ def test_diagnostics_collect_reports_registered_distributions(tmp_path: Path) ->
 
 
 @requires_native_pytest
-def test_diagnostics_collect_identifies_plug_in_import_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize("missing", ["vfy_missing_dependency", "_pytest._vfy_missing_private"])
+def test_diagnostics_collect_identifies_plug_in_import_failure(
+    tmp_path: Path, missing: str
+) -> None:
     project = VfyProject(tmp_path)
-    project.write("diagnostics_probe.py", "import vfy_missing_dependency\n")
+    project.write(
+        "diagnostics_probe-1.0.dist-info/METADATA",
+        "Metadata-Version: 2.1\nName: diagnostics-probe\nVersion: 1.0\n",
+    )
+    project.write(
+        "diagnostics_probe-1.0.dist-info/entry_points.txt",
+        "[pytest11]\ndiagnostics_probe = diagnostics_probe_module\n",
+    )
+    project.write("diagnostics_probe_module.py", f"import {missing}\n")
     project.write("test_ok.py", "def test_ok():\n    pass\n")
 
     result = project.run_vfy(
@@ -1076,16 +1087,20 @@ def test_diagnostics_collect_identifies_plug_in_import_failure(tmp_path: Path) -
         "--engine=native",
         "--collect",
         "--json",
-        "--",
-        "-p",
-        "diagnostics_probe",
+        env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": None},
     ).expect(0)
 
     collection = json.loads(result.stdout)["test_readiness"]["collection"]
     assert collection["status"] == "failed"
     assert collection["loaded_plugins"] is None
-    assert "diagnostics_probe.py" in collection["diagnostic"]
-    assert "No module named 'vfy_missing_dependency'" in collection["diagnostic"]
+    diagnostic = collection["diagnostic"]
+    assert "diagnostics_probe_module.py" in diagnostic
+    assert f"No module named '{missing}'" in diagnostic
+    assert (
+        "Failed to load pytest plug-in 'diagnostics-probe' "
+        "(entry point 'diagnostics_probe', module 'diagnostics_probe_module')."
+    ) in diagnostic
+    assert ("vfy test --engine=pytest" in diagnostic) == missing.startswith("_pytest.")
 
 
 @pytest.mark.skipif(

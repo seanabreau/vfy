@@ -1,5 +1,6 @@
 //! Native plugin activation over `CPython`'s standard distribution metadata protocol.
 use super::Collector;
+use pyo3::exceptions::{PyBaseException, PyImportError};
 use pyo3::prelude::*;
 
 mod arguments;
@@ -316,6 +317,35 @@ fn entrypoints(py: Python<'_>) -> PyResult<Vec<EntryPoint>> {
     Ok(result)
 }
 
+fn note_entrypoint_failure(
+    py: Python<'_>,
+    error: &PyErr,
+    name: &str,
+    module: &str,
+    distribution: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let distribution_name: String = distribution
+        .getattr("metadata")?
+        .get_item("Name")?
+        .extract()?;
+    let exception = error.value(py);
+    let add_note = py.get_type::<PyBaseException>().getattr("add_note")?;
+    add_note.call1((
+        exception,
+        format!("Failed to load pytest plug-in '{distribution_name}' (entry point '{name}', module '{module}')."),
+    ))?;
+    if error.is_instance_of::<PyImportError>(py)
+        && let Some(missing) = exception.getattr("name")?.extract::<Option<String>>()?
+        && (missing == "_pytest" || missing.starts_with("_pytest."))
+    {
+        add_note.call1((
+            exception,
+            "This plug-in needs pytest internals. Run the suite with pytest or use vfy test --engine=pytest.",
+        ))?;
+    }
+    Ok(())
+}
+
 impl<'py> Collector<'py> {
     pub(super) fn initialize_asyncio_imports(&self) -> PyResult<()> {
         // Public fixture declarations remain importable when the plugin is
@@ -578,13 +608,25 @@ impl<'py> Collector<'py> {
             let (plugin, distribution) =
                 hypothesis_plugin(self.py, context.config.bind(self.py), entry)?;
             (plugin, Some(distribution))
-        } else if let Some((_, entry, distribution)) = entry {
+        } else if let Some((entry_name, entry, distribution)) = entry {
             let module = entry.bind(self.py).getattr("module")?.extract::<String>()?;
             self.py
                 .import("vfy.independent.imports")?
-                .call_method1("register_assert_rewrite", (module,))?;
+                .call_method1("register_assert_rewrite", (module.as_str(),))?;
             (
-                entry.bind(self.py).call_method0("load")?,
+                entry
+                    .bind(self.py)
+                    .call_method0("load")
+                    .inspect_err(|error| {
+                        // Metadata or note failures must leave the import exception intact.
+                        let _ = note_entrypoint_failure(
+                            self.py,
+                            error,
+                            &entry_name,
+                            &module,
+                            distribution.bind(self.py),
+                        );
+                    })?,
                 Some(distribution),
             )
         } else {

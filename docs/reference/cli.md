@@ -490,7 +490,7 @@ pytest-xdist 3.8.0. Other versions get an installation diagnostic. `--json`
 output is suitable for bug reports.
 
 `--collect` runs collection with the selected engine in a child process.
-Test modules and collection hooks run; test bodies do not. The output reports
+The child imports test modules and runs collection hooks. The output reports
 the collected item count and shows errors from a failed collection. On the
 default engine, it also reports installed plug-in distributions registered by
 collection, including the distribution identity of registered vfy adapters.
