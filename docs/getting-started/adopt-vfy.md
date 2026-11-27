@@ -51,35 +51,41 @@ alongside the existing coverage job.
 
 Run the same tests under pytest with each collector. If your coverage
 configuration defines the source roots, use bare `--cov` to keep them. Carry
-over the existing branch mode, configuration path, other coverage settings, and
-the gate used in CI. This example uses pytest-cov 7.1, a 93% threshold, and
+over the existing branch mode and other coverage settings. Pass a custom
+configuration path with `--cov-config` for the plug-ins and `--rcfile` for
+the coverage commands. This example uses pytest-cov 7.1, a 93% threshold, and
 zero decimal places. Set the threshold and precision explicitly on both
 commands, including when they come from coverage configuration in your current
 job.
 
-Use a different `COVERAGE_FILE` and a different destination for every report
-in each run. Clear inherited options as above, then reapply the report options
-with the new paths. An XML destination on the command line leaves inherited
-reports of other formats active unless you remove those options.
+Store comparison databases and reports in a directory separate from your
+existing job's data. Use a distinct database and report path for each run.
+Clear inherited options as above, then reapply report options with the new paths.
+
+<!-- doc-test: prepare-coverage-directories -->
+```console
+mkdir -p .vfy-adoption
+```
 
 <!-- doc-test: compare-collectors -->
 ```console
-PYTEST_ADDOPTS= COVERAGE_FILE=.coverage.pytest-cov uv run --python 3.12 pytest -o addopts= -p pytest_cov --cov --cov-report=term-missing --cov-report=xml:coverage.pytest-cov.xml --cov-fail-under=93 --cov-precision=0 tests -v
-PYTEST_ADDOPTS= COVERAGE_FILE=.coverage.vfy uv run --python 3.12 pytest -o addopts= -p no:pytest_cov -p vfy.pytest_plugin --cov --cov-report=term-missing --cov-report=xml:coverage.vfy.xml --cov-fail-under=93 --cov-precision=0 tests -v
+PYTEST_ADDOPTS= COVERAGE_FILE=.vfy-adoption/pytest-cov.data uv run --python 3.12 pytest -o addopts= -p pytest_cov --cov --cov-report=term-missing --cov-report=xml:.vfy-adoption/pytest-cov.xml --cov-fail-under=93 --cov-precision=0 tests -v
+PYTEST_ADDOPTS= COVERAGE_FILE=.vfy-adoption/vfy.data uv run --python 3.12 pytest -o addopts= -p no:pytest_cov -p vfy.pytest_plugin --cov --cov-report=term-missing --cov-report=xml:.vfy-adoption/vfy.xml --cov-fail-under=93 --cov-precision=0 tests -v
 ```
 
 ### Compare Coverage.py commands
 
 If your current job uses `coverage run -m pytest`, compare these commands
-with the same configuration and pytest options. Each command saves a separate
-database. The XML commands write reports from those databases.
+with the same configuration and pytest options. If your job combines shards
+before reporting, run its combine step with each run's `--data-file`. The XML
+commands export the reports, and the next section checks the coverage gate.
 
 <!-- doc-test: compare-coverage-commands -->
 ```console
-PYTEST_ADDOPTS= uv run --python 3.12 coverage run --data-file=.coverage.coverage-py -m pytest -o addopts= tests -v
-PYTEST_ADDOPTS= uv run --python 3.12 vfy coverage run --data-file=.coverage.vfy-run -m pytest -o addopts= tests -v
-uv run --python 3.12 coverage xml --data-file=.coverage.coverage-py -o coverage.coverage-py.xml
-uv run --python 3.12 vfy coverage xml --data-file=.coverage.vfy-run -o coverage.vfy-run.xml
+PYTEST_ADDOPTS= uv run --python 3.12 coverage run --data-file=.vfy-adoption/coverage-py.data -m pytest -o addopts= tests -v
+PYTEST_ADDOPTS= uv run --python 3.12 vfy coverage run --data-file=.vfy-adoption/vfy-run.data -m pytest -o addopts= tests -v
+uv run --python 3.12 coverage xml --data-file=.vfy-adoption/coverage-py.data --fail-under=0 -o .vfy-adoption/coverage-py.xml
+uv run --python 3.12 vfy coverage xml --data-file=.vfy-adoption/vfy-run.data --fail-under=0 -o .vfy-adoption/vfy-run.xml
 ```
 
 ## Check the coverage gate
@@ -91,14 +97,14 @@ service that consumes it.
 Use the pinned Coverage.py version from your existing job to report on both
 databases. Then run the vfy reporter on the same candidate database. Keep the
 report configuration, precision, and threshold the same and record both
-reporter versions. For the `coverage run` comparison, substitute
-`.coverage.coverage-py` and `.coverage.vfy-run` for the data files.
+reporter versions. For the `coverage run` comparison, use
+`.vfy-adoption/coverage-py.data` and `.vfy-adoption/vfy-run.data`.
 
 <!-- doc-test: compare-reporters -->
 ```console
-uv run --python 3.12 coverage report --data-file=.coverage.pytest-cov --fail-under=93 --precision=0 --show-missing
-uv run --python 3.12 coverage report --data-file=.coverage.vfy --fail-under=93 --precision=0 --show-missing
-uv run --python 3.12 vfy coverage report --data-file=.coverage.vfy --fail-under=93 --precision=0 --show-missing
+uv run --python 3.12 coverage report --data-file=.vfy-adoption/pytest-cov.data --fail-under=93 --precision=0 --show-missing
+uv run --python 3.12 coverage report --data-file=.vfy-adoption/vfy.data --fail-under=93 --precision=0 --show-missing
+uv run --python 3.12 vfy coverage report --data-file=.vfy-adoption/vfy.data --fail-under=93 --precision=0 --show-missing
 ```
 
 The first two commands show how the collected data affects the report. The

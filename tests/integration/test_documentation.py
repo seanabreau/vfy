@@ -90,7 +90,7 @@ def commands(
         elif args[0] == "vfy":
             result = project.run_vfy(*args[1:], env=environment)
         else:
-            assert args[0] == "git", f"unsupported tutorial command: {line}"
+            assert args[0] in {"git", "mkdir"}, f"unsupported tutorial command: {line}"
             result = project.run(*args, env=environment)
         assert result.returncode == status, (page, name, line, result)
         results.append(result)
@@ -183,6 +183,12 @@ def test_adoption_comparison_runs_the_requested_scope(project: VfyProject) -> No
 
 @requires_native_test_engine
 def test_staged_adoption_preserves_coverage_artifacts(project: VfyProject) -> None:
+    config = project.root / "pyproject.toml"
+    config.write_text(
+        config.read_text().replace(
+            "[tool.coverage.report]\n", "[tool.coverage.report]\nfail_under = 93\nprecision = 2\n"
+        )
+    )
     project.write(
         "pytest.ini",
         "[pytest]\npythonpath = src\n"
@@ -205,11 +211,12 @@ def test_staged_adoption_preserves_coverage_artifacts(project: VfyProject) -> No
         assert passed_nodes(result) == expected_nodes
     assert sorted(project.root.glob(".coverage*")) == [project.root / ".coverage"]
 
+    commands(project, ADOPTION, "prepare-coverage-directories")
     for result in commands(project, ADOPTION, "compare-collectors", status=1, env=env):
         assert passed_nodes(result) == expected_nodes
         assert "total of 80 is less than fail-under=93" in result.stdout + result.stderr
-    pytest_cov = evidence(project, ".coverage.pytest-cov")
-    assert pytest_cov == evidence(project, ".coverage.vfy")
+    pytest_cov = evidence(project, ".vfy-adoption/pytest-cov.data")
+    assert pytest_cov == evidence(project, ".vfy-adoption/vfy.data")
     assert sorted(pytest_cov) == ["src/bounds.py", "src/formatting.py"]
     assert (5, 6) not in pytest_cov["src/bounds.py"]["arcs"]
     for result in commands(project, ADOPTION, "compare-reporters", status=2, env=env):
@@ -217,9 +224,11 @@ def test_staged_adoption_preserves_coverage_artifacts(project: VfyProject) -> No
 
     stock_run, vfy_run, _, _ = commands(project, ADOPTION, "compare-coverage-commands", env=env)
     assert passed_nodes(stock_run) == passed_nodes(vfy_run) == expected_nodes
-    assert evidence(project, ".coverage.coverage-py") == evidence(project, ".coverage.vfy-run")
+    assert evidence(project, ".vfy-adoption/coverage-py.data") == evidence(
+        project, ".vfy-adoption/vfy-run.data"
+    )
     for lane in ("pytest-cov", "vfy", "coverage-py", "vfy-run"):
-        xml = ET.parse(project.root / f"coverage.{lane}.xml").getroot()
+        xml = ET.parse(project.root / ".vfy-adoption" / f"{lane}.xml").getroot()
         assert float(xml.attrib["line-rate"]) == 0.875
         assert float(xml.attrib["branch-rate"]) == 0.5
 
@@ -228,6 +237,9 @@ def test_staged_adoption_preserves_coverage_artifacts(project: VfyProject) -> No
     for result in commands(project, ADOPTION, "compare-collectors", env=env):
         assert passed_nodes(result) == expected_nodes
         assert "100%" in result.stdout
+    for result in (project.run_coverage_py("combine"), project.run_vfy("coverage", "combine")):
+        assert result.returncode == 1, result
+        assert "No data to combine" in result.stdout + result.stderr
     assert all(path.read_text() == "original CI result\n" for path in original_artifacts)
 
 
