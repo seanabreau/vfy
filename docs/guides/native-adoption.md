@@ -199,7 +199,11 @@ other execution hooks are rejected.
 
 ### Use pytester
 
-Load pytest's `pytester` fixture with `-p pytester` or a root
+The `pytester` and legacy `testdir` fixtures require an installed pytest
+engine. Install `vfy[pytest]` and run with `--engine=pytest-native` or
+`--engine=pytest`.
+
+Load the fixtures with `-p pytester` or a root
 `conftest.py` declaration such as `pytest_plugins = ["pytester"]`.
 The helper plug-in `pytester_assertions` is also accepted. Nested pytester runs
 use stock pytest.
