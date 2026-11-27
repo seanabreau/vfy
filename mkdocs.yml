@@ -51,6 +51,7 @@ nav:
   - Overview: index.md
   - Getting started:
     - Installation: getting-started/installation.md
+    - Adopt vfy in an existing project: getting-started/adopt-vfy.md
     - Run tests: guides/run-tests.md
     - Measure coverage: getting-started/quickstart.md
     - Run affected tests: getting-started/selection.md
