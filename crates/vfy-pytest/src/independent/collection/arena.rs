@@ -30,7 +30,7 @@ pub(in crate::independent) enum CollectionNodeKind {
     Function,
     /// A collector returned by a `pytest_collect_file` hook or `Collector.collect()`.
     CustomCollector,
-    /// An item returned by a custom collector's `collect()`.
+    /// An item returned by a file hook or a custom collector's `collect()`.
     CustomItem,
 }
 
