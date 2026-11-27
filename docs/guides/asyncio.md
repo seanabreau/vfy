@@ -1,10 +1,10 @@
 # Test asyncio code
 
 `vfy test` runs `async def` tests and fixtures with coverage through its built-in
-adapter. You don't need pytest-asyncio. The default engine autoloads an
-installed AnyIO pytest plug-in, as it does other installed plug-ins, but
-third-party async backends are outside its compatibility contract; see
-[AnyIO with direct pytest](#use-hypothesis-or-anyio-with-direct-pytest).
+adapter. You don't need pytest-asyncio. The default engine can load the installed
+AnyIO pytest plug-in. Compare your suite's async backend outcomes with pytest
+before adopting it. See [AnyIO with direct pytest](#use-hypothesis-or-anyio-with-direct-pytest)
+for suites that need pytest execution.
 
 ## Run an async test
 
@@ -143,16 +143,16 @@ def pytest_asyncio_loop_factories(config, item):
 
 ## Use Hypothesis or AnyIO with direct pytest
 
-For an existing AnyIO suite, keep its plug-ins and pytest as the runner. To add
-vfy coverage, use:
+The `pytest-native` engine omits AnyIO. The default engine can load it, and some
+suites need pytest's runtime for their plug-ins or async backends. To use vfy
+coverage with stock pytest, run:
 
 ```console
 uv run pytest -p no:pytest_cov -p vfy.pytest_plugin --cov=src tests
 ```
 
-Replace `src` and `tests` with your source and test paths. AnyIO execution is
-unsupported by `vfy test`, including `asyncio_mode = "auto"`. Test selection and
-`vfy mutate` are not suitable for suites that depend on it.
+Replace `src` and `tests` with your source and test paths. Use asyncio strict mode
+when combining vfy's adapter with another plug-in that claims async tests.
 
 To combine vfy's asyncio adapter with Hypothesis or AnyIO under direct pytest,
 install the other packages and run `uv run pytest -p vfy.asyncio_plugin`.

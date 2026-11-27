@@ -45,8 +45,9 @@ how to compare results before changing CI.
 If the native route rejects a custom `pytest.Item` or a
 `pytest_runtest_call` hook in `conftest.py`, try the independent engine with the
 same dependencies. It supports public custom items and call hooks; compare its
-collection and outcomes with pytest before adopting it. AnyIO tests and plug-ins
-that need pytest internals stay on pytest with vfy coverage. Narrowing vfy's
+collection and outcomes with pytest before adopting it. The independent engine
+can load AnyIO. Suites that require behavior it cannot reproduce can use pytest
+with vfy coverage. Narrowing vfy's
 scope with `--ignore` omits those tests from the run and disables affected-test
 selection for that invocation; it does not validate the whole suite.
 

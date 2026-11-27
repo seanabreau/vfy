@@ -47,6 +47,12 @@ Compare collected test IDs, outcomes, exit statuses, and the behavior your
 fixtures and plug-ins provide. A runner comparison can stay in its own job
 alongside the existing coverage job.
 
+If a difference appears against an older pytest pin, repeat the comparison in
+a separate environment with vfy's
+[pytest reference version](../about/compatibility.md#versions). This helps
+identify differences between pytest releases while keeping the original job
+available for comparison.
+
 ## Compare coverage under pytest
 
 Run the same tests under pytest with each collector. If your coverage

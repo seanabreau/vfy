@@ -19,6 +19,7 @@ from vfy.native import (
     replay_fingerprint,
     source_tree_identity,
 )
+from vfy.output import OutputPolicy
 from vfy.source_roots import source_graph_roots
 from vfy.workers import requested_worker_collection
 
@@ -355,8 +356,8 @@ def _replay_evidence(
             git_available = False
             state = GitReplayState("", False, (), True, True, "")
             if args.fresh:
-                _controller_message(
-                    args, f"Git replay unavailable ({exc}); running without a saved baseline"
+                OutputPolicy.from_args(args).diagnostic(
+                    f"Git replay unavailable ({exc}); running without a saved baseline"
                 )
         _profile_end("git", git_started)
         if purpose == "selection":

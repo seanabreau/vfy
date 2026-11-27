@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import shutil
 import sys
@@ -246,8 +247,7 @@ class TerminalReporter:
             result.append(f"configfile: {os.path.relpath(config.inipath, config.rootpath)}")
         names: list[str] = []
         for _plugin, dist in config.pluginmanager.list_plugin_distinfo():
-            info = cast("Any", dist)
-            name = f"{info.project_name}-{info.version}"
+            name = f"{dist.project_name}-{dist.version}"
             name = name.removeprefix("pytest-")
             if name not in names:
                 names.append(name)
@@ -280,6 +280,17 @@ class TerminalReporter:
 
     def collect_only_summary(self, selected: int, deselected: int) -> None:
         """Write pytest's ``--collect-only`` counts through ``summary_stats``."""
+        if report := os.environ.get("VFY_DIAGNOSTICS_PLUGIN_REPORT"):
+            manager = self.config.pluginmanager
+            plugins = sorted(
+                (
+                    {"name": name, "distribution": dist.project_name, "version": dist.version}
+                    for plugin, dist in manager.list_plugin_distinfo()
+                    if (name := manager.get_name(plugin)) is not None
+                ),
+                key=lambda plugin: (plugin["distribution"], plugin["name"], plugin["version"]),
+            )
+            Path(report).write_text(json.dumps(plugins), encoding="utf-8")
         errors = self._status_index.terminal_bucket_count(self, "error")
         collected = selected + deselected
         if collected == 0:

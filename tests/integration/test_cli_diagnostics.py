@@ -1038,6 +1038,56 @@ def test_diagnostics_collect_reports_exact_parametrized_count_without_running_te
     assert "collected_support_unknown" not in text.stdout
 
 
+@requires_native_pytest
+def test_diagnostics_collect_reports_registered_distributions(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write(
+        "diagnostics_probe-1.0.dist-info/METADATA",
+        "Metadata-Version: 2.1\nName: diagnostics-probe\nVersion: 1.0\n",
+    )
+    project.write(
+        "diagnostics_probe-1.0.dist-info/entry_points.txt",
+        "[pytest11]\ndiagnostics_probe = diagnostics_probe\n",
+    )
+    project.write("diagnostics_probe.py", "def pytest_collection_finish(session):\n    pass\n")
+    project.write("test_ok.py", "def test_ok():\n    pass\n")
+    arguments = ("diagnostics", "--engine=native", "--collect")
+    load = ("--", "-p", "diagnostics_probe")
+
+    disabled = project.run_vfy(*arguments, "--json").expect(0)
+    collected = project.run_vfy(*arguments, "--json", *load).expect(0)
+    assert json.loads(disabled.stdout)["test_readiness"]["collection"]["loaded_plugins"] == []
+    collection = json.loads(collected.stdout)["test_readiness"]["collection"]
+    assert collection["loaded_plugins"] == [
+        {"distribution": "diagnostics-probe", "name": "diagnostics_probe", "version": "1.0"}
+    ]
+    text = project.run_vfy(*arguments, *load).expect(0)
+    assert "diagnostics-probe 1.0 (diagnostics_probe)" in text.stdout
+
+
+@requires_native_pytest
+def test_diagnostics_collect_identifies_plug_in_import_failure(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write("diagnostics_probe.py", "import vfy_missing_dependency\n")
+    project.write("test_ok.py", "def test_ok():\n    pass\n")
+
+    result = project.run_vfy(
+        "diagnostics",
+        "--engine=native",
+        "--collect",
+        "--json",
+        "--",
+        "-p",
+        "diagnostics_probe",
+    ).expect(0)
+
+    collection = json.loads(result.stdout)["test_readiness"]["collection"]
+    assert collection["status"] == "failed"
+    assert collection["loaded_plugins"] is None
+    assert "diagnostics_probe.py" in collection["diagnostic"]
+    assert "No module named 'vfy_missing_dependency'" in collection["diagnostic"]
+
+
 @pytest.mark.skipif(
     sys.platform == "win32",
     reason="the native test engine does not support Windows",

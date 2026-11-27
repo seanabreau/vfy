@@ -224,6 +224,10 @@ class _DistFacade:
     def project_name(self) -> str:
         return self._dist.metadata["Name"]
 
+    @property
+    def version(self) -> str:
+        return self._dist.version
+
     def __getattr__(self, attr: str) -> object:
         return getattr(self._dist, attr)
 
@@ -239,7 +243,7 @@ class PluginManager:
         self._plugin_distinfo: list[tuple[object, importlib.metadata.Distribution]] = []
         self._plugin_aliases: dict[str, str] = {}
 
-    def list_plugin_distinfo(self) -> list[tuple[object, object]]:
+    def list_plugin_distinfo(self) -> list[tuple[object, _DistFacade]]:
         # Native plugin loading records raw importlib.metadata distributions;
         # pytest reads ``project_name`` from the pluggy facade.
         return [(plugin, _DistFacade(dist)) for plugin, dist in self._plugin_distinfo]

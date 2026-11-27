@@ -490,8 +490,12 @@ pytest-xdist 3.8.0. Other versions get an installation diagnostic. `--json`
 output is suitable for bug reports.
 
 `--collect` runs collection with the selected engine in a child process.
-Test modules and collection hooks run; test bodies do not. The output
-reports the exact collected item count. Collection does not prove that tests
+Test modules and collection hooks run; test bodies do not. The output reports
+the collected item count and shows errors from a failed collection. On the
+default engine, it also reports installed plug-in distributions registered by
+collection, including the distribution identity of registered vfy adapters.
+JSON records these in `test_readiness.collection.loaded_plugins`,
+with `null` when no inventory was available. Collection does not prove that tests
 pass, so run `vfy test` with the same engine to check fixtures and outcomes. Pass
 invocation-specific pytest options after `--` so diagnostics can inspect them.
 Native diagnostics also retains `native_readiness` in JSON for that route.

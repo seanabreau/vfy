@@ -467,8 +467,9 @@ def test_selected_run_imports_only_modules_with_selected_tests(tmp_path: Path) -
 
 
 @pytest.mark.parametrize("repository", ["absent", "without-commits"])
+@pytest.mark.parametrize("explicit_full", [False, True], ids=["implicit", "all"])
 def test_independent_coverage_run_without_git_head_runs_the_full_suite(
-    tmp_path: Path, repository: str
+    tmp_path: Path, repository: str, explicit_full: bool
 ) -> None:
     project = VfyProject(tmp_path)
     project.write("pkg/__init__.py", "")
@@ -479,13 +480,19 @@ def test_independent_coverage_run_without_git_head_runs_the_full_suite(
     if repository == "without-commits":
         subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
 
-    result = project.run_vfy("test", "--engine=native", *_ARGUMENTS)
+    arguments = ("test", "--engine=native", *_ARGUMENTS, *(("--all",) if explicit_full else ()))
+    result = project.run_vfy(*arguments)
 
     result.expect(0)
     assert "1 passed" in result.stdout
     assert _FULL in result.stderr
-    assert "Git state is unavailable" in result.stderr
+    assert "Git replay unavailable" not in result.stderr
+    reason = "the complete suite was requested" if explicit_full else "Git state is unavailable"
+    assert reason in result.stderr
     assert (tmp_path / ".coverage").is_file()
+    if explicit_full:
+        verbose = project.run_vfy("--verbose", *arguments).expect(0)
+        assert "vfy: Git replay unavailable" in verbose.stderr
 
 
 def _terminal_lines(project: VfyProject, *arguments: str) -> list[str]:

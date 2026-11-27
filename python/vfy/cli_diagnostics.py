@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from ._pytest.collection_readiness import MISSING_FIXTURES_PREFIX, UNSUPPORTED_ITEMS_PREFIX
@@ -493,40 +494,58 @@ def _diagnostics_collect(pytest_args: list[str], *, engine: str) -> dict[str, ob
         "VFY_CI_IGNORED",
         "VFY_REPLAY_MERGE",
         "VFY_TEST_HISTORY",
+        "VFY_DIAGNOSTICS_PLUGIN_REPORT",
     ):
         environment.pop(name, None)
-    try:
-        result = capture_command(
-            command,
-            cwd=Path.cwd(),
-            environment=environment,
-            timeout=120,
+    with TemporaryDirectory(prefix="vfy-diagnostics-") as temporary:
+        plugin_report = Path(temporary) / "plugins.json"
+        if engine == "native":
+            environment["VFY_DIAGNOSTICS_PLUGIN_REPORT"] = str(plugin_report)
+        try:
+            result = capture_command(
+                command,
+                cwd=Path.cwd(),
+                environment=environment,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as error:
+            return {
+                "status": "timed_out",
+                "returncode": None,
+                "collected_count": None,
+                "support": "unknown",
+                "diagnostic": f"pytest collection exceeded 120 seconds: {error}",
+                "unsupported_items": False,
+                "missing_fixtures": False,
+                "loaded_plugins": None,
+            }
+        loaded_plugins = (
+            json.loads(plugin_report.read_text(encoding="utf-8"))
+            if plugin_report.is_file()
+            else None
         )
-    except subprocess.TimeoutExpired as error:
-        return {
-            "status": "timed_out",
-            "returncode": None,
-            "collected_count": None,
-            "support": "unknown",
-            "diagnostic": f"pytest collection exceeded 120 seconds: {error}",
-            "unsupported_items": False,
-            "missing_fixtures": False,
-        }
     # Projects such as humanize set `--color=yes` in `addopts`; the captured
     # summary is reparsed and reprinted, so terminal markup must not survive.
     stdout, stderr = (_ANSI_ESCAPE.sub("", output) for output in (result.stdout, result.stderr))
     # Quiet collection lists one node ID per line; an ID that merely contains
     # "error", such as a test named for the error it checks, is not a finding.
-    summary_lines = [
-        line
-        for line in (*stdout.splitlines(), *stderr.splitlines())
-        if ("collected" in line.lower() or "error" in line.lower())
-        and not _COLLECTED_NODE_ID.match(line)
-    ]
-    unsupported_items = any(
-        line.startswith(UNSUPPORTED_ITEMS_PREFIX) for line in stdout.splitlines()
-    )
-    missing_fixtures = any(line.startswith(MISSING_FIXTURES_PREFIX) for line in stdout.splitlines())
+    stdout_lines, stderr_lines = stdout.splitlines(), stderr.splitlines()
+    if result.returncode:
+        # The traceback tail identifies a failing plug-in even when its frames
+        # contain none of the words used in the collection summary.
+        summary_lines = [
+            *[line for line in stdout_lines if not _COLLECTED_NODE_ID.match(line)][-20:],
+            *stderr_lines[-20:],
+        ]
+    else:
+        summary_lines = [
+            line
+            for line in (*stdout_lines, *stderr_lines)
+            if ("collected" in line.lower() or "error" in line.lower())
+            and not _COLLECTED_NODE_ID.match(line)
+        ][-20:]
+    unsupported_items = any(line.startswith(UNSUPPORTED_ITEMS_PREFIX) for line in stdout_lines)
+    missing_fixtures = any(line.startswith(MISSING_FIXTURES_PREFIX) for line in stdout_lines)
     collected_count: int | None = None
     for output in (stdout, stderr):
         matches = re.findall(
@@ -542,9 +561,10 @@ def _diagnostics_collect(pytest_args: list[str], *, engine: str) -> dict[str, ob
         "returncode": result.returncode,
         "collected_count": collected_count,
         "support": "unknown",
-        "diagnostic": "\n".join(summary_lines[-20:]),
+        "diagnostic": "\n".join(summary_lines).strip(),
         "unsupported_items": unsupported_items,
         "missing_fixtures": missing_fixtures,
+        "loaded_plugins": loaded_plugins,
     }
 
 
@@ -635,11 +655,22 @@ def _print_diagnostics_report(diagnostics: dict[str, object]) -> None:
         print(f"Run `vfy diagnostics{engine_option} --collect` to check collection.")
     else:
         assert isinstance(collection, dict)
-        count = collection["collected_count"]
-        if count is not None:
-            noun = "test" if count == 1 else "tests"
-            print(f"{count} {noun} collected; execution support remains unknown")
-        print(f"Collection: {collection['status']}")
-        if collection["diagnostic"]:
-            print(collection["diagnostic"])
+        _print_diagnostics_collection(collection)
     print("A passing collection does not prove test execution compatibility.")
+
+
+def _print_diagnostics_collection(collection: dict[str, object]) -> None:
+    count = collection["collected_count"]
+    if count is not None:
+        noun = "test" if count == 1 else "tests"
+        print(f"{count} {noun} collected; execution support remains unknown")
+    print(f"Collection: {collection['status']}")
+    if collection["diagnostic"]:
+        print(collection["diagnostic"])
+    plugins = cast(list[dict[str, str]] | None, collection["loaded_plugins"])
+    if plugins is not None:
+        print("Installed pytest plug-in distributions registered during collection:")
+        for plugin in plugins:
+            print(f"  - {plugin['distribution']} {plugin['version']} ({plugin['name']})")
+        if not plugins:
+            print("  None")

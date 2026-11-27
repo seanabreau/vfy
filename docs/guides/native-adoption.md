@@ -24,12 +24,13 @@ uv run vfy diagnostics --collect -- tests
 ```
 
 Diagnostics reports visible configuration, plug-in, and hook conflicts with
-locations and suggested fixes. With `--engine=pytest-native`, it also lists
-which installed plug-ins vfy loads and which it omits; the default engine's
-report lists no plug-ins, so check them with a test run. The static scan can
+locations and suggested fixes. With `--engine=pytest-native`, it lists the
+planned plug-in loads, replacements, and omissions. Its static scan can
 include nested `conftest.py` files outside the chosen test path. Add `--collect`
-to import modules and run collection hooks for the chosen path. Run the suite
-to check test bodies and fixture behavior. Pass run options after `--`.
+to import modules and run collection hooks for the chosen path. For the default
+engine, this also reports which installed plug-ins registered during collection.
+Run the suite to check test bodies and fixture behavior. Pass run options after
+`--`.
 
 ## Compare one suite before you change CI
 
@@ -76,8 +77,11 @@ pytest. If a required plug-in is still omitted or needs pytest internals, use
 pytest with vfy coverage as shown below. [Troubleshooting](../help/troubleshooting.md#vfy-rejects-a-test-option-or-plug-in)
 covers inherited options and missing fixtures.
 
-If your suite depends on AnyIO or another unsupported runtime plug-in, keep
-pytest as the runner and use vfy for coverage:
+The default engine can autoload installed AnyIO. Compare test outcomes for
+each async backend your suite uses. The `pytest-native` engine omits AnyIO.
+If your suite requires AnyIO behavior that vfy does not reproduce, keep pytest
+as the runner and use vfy for coverage. The same workflow keeps other
+unsupported plug-ins active:
 
 ```console
 uv run pytest -p no:pytest_cov -p vfy.pytest_plugin --cov=src tests
