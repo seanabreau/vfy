@@ -70,7 +70,7 @@ See [explain](../guides/test-selection.md#explain) for decision data and JSON.
 
 ## Which features are ready to try?
 
-vfy is Alpha, so interfaces may change. vfy 0.0.1 supports Linux and macOS.
+vfy is Alpha, so interfaces may change. vfy supports Linux and macOS.
 See [Compatibility](../about/compatibility.md) for feature and plug-in limits.
 
 ## Can Coverage.py open vfy data?

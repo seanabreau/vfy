@@ -290,12 +290,15 @@ fn display_filters_preserve_full_totals_and_branch_mode_when_all_rows_are_hidden
     );
 }
 
-fn scrub_json_timestamp(rendered: &str) -> String {
+fn normalize_json_metadata(rendered: &str) -> String {
     let mut value: Value = serde_json::from_str(rendered).expect("valid JSON report");
-    value["meta"]
-        .as_object_mut()
-        .expect("metadata object")
-        .remove("timestamp");
+    let metadata = value["meta"].as_object_mut().expect("metadata object");
+    metadata.remove("timestamp");
+    let version = metadata
+        .get_mut("version")
+        .expect("report generator version");
+    assert_eq!(*version, format!("vfy {}", env!("CARGO_PKG_VERSION")));
+    *version = Value::String("vfy <version>".to_owned());
     format!(
         "{}\n",
         serde_json::to_string_pretty(&value).expect("serialize JSON report")
@@ -387,7 +390,7 @@ fn all_public_renderer_shapes_have_reviewed_snapshots() {
     );
     insta::assert_snapshot!(
         "json",
-        with_row(true, |rows| scrub_json_timestamp(
+        with_row(true, |rows| normalize_json_metadata(
             &render_json(rows, true, true, 1).expect("JSON report")
         ))
     );

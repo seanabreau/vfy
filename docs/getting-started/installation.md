@@ -10,7 +10,7 @@ platforms. You need CPython 3.12+ and
 Installing a wheel does not require Git, Rust, or a C compiler. Affected-test
 selection uses Git to compare edits with a passing baseline.
 
-vfy 0.0.1 ships wheels for Linux x86_64 and aarch64 (glibc and musl), and macOS x86_64 and arm64.
+vfy ships wheels for Linux x86_64 and aarch64 (glibc and musl), and macOS x86_64 and arm64.
 
 `vfy test` and `vfy mutate` run tests with vfy's native engine by default,
 without installed pytest. Independent mutation testing requires Linux. For
