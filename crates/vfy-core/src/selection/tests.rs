@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 
+use super::git::{IndexEntry, parse_index, submodule_change, submodule_status_change};
 use super::{
     ArcSelectionRecord, FileSelectionEvidence, LineSelectionRecord, SelectionEvidence,
     SelectionInput, SelectionMode, SelectionRequest, TestAttempt, TestObservation, TestOutcome,
@@ -2268,4 +2269,89 @@ fn git_failures_name_the_operation_on_one_line() {
 
     assert!(error.starts_with("failed to read Git HEAD: "), "{error}");
     assert!(!error.contains('\n'), "{error}");
+}
+
+#[test]
+fn index_identifies_submodules_by_their_recorded_commit() {
+    let commit = "f2bcd31f1c4189995e548ed9f4ddadb147390073";
+    let index = parse_index(
+        format!(
+            "100644 5aa97e431faf82a864e7d8a805ddee7628c3180c 0\t.gitmodules\0\
+             120000 e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 0\tlink.py\0\
+             160000 {commit} 0\tmy data\0"
+        )
+        .as_bytes(),
+    )
+    .expect("parse index");
+    assert_eq!(
+        index,
+        BTreeMap::from([
+            (".gitmodules".to_owned(), IndexEntry::Blob),
+            ("link.py".to_owned(), IndexEntry::Blob),
+            (
+                "my data".to_owned(),
+                IndexEntry::Submodule {
+                    commit: commit.to_owned()
+                }
+            ),
+        ])
+    );
+    for record in [
+        "160000 not-a-commit 0\tdata\0",
+        "100644 e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 0 data\0",
+    ] {
+        assert!(parse_index(record.as_bytes()).is_err(), "{record:?}");
+    }
+}
+
+#[test]
+fn submodule_status_names_why_the_recorded_commit_does_not_apply() {
+    // Records printed by `git status --porcelain=v2 -z --ignore-submodules=none`.
+    let entry = |code: &str, state: &str| {
+        format!(
+            "1 {code} {state} 160000 160000 160000 \
+             f2bcd31f1c4189995e548ed9f4ddadb147390073 \
+             47741e65f7c958ec44627325b209ba39f8276741 my data\0"
+        )
+    };
+    for (status, expected) in [
+        (String::new(), None),
+        (
+            entry(".M", "SC.."),
+            Some("is not checked out at its recorded commit"),
+        ),
+        (entry(".M", "S.M."), Some("has uncommitted changes")),
+        (entry(".M", "S..U"), Some("has uncommitted changes")),
+        (entry("M.", "S..."), Some("has a staged change")),
+        (
+            "u UU S... 160000 160000 160000 160000 a b c my data\0".to_owned(),
+            Some("has a merge conflict"),
+        ),
+    ] {
+        assert_eq!(
+            submodule_status_change(status.as_bytes()),
+            expected.map(|state| format!("Git submodule my data {state}")),
+            "{status:?}"
+        );
+    }
+}
+
+#[test]
+fn uninitialized_submodule_requires_a_full_run() {
+    let directory = tempfile::tempdir().expect("repository");
+    let root = directory.path();
+    std::fs::create_dir(root.join("initialized")).expect("initialized submodule");
+    std::fs::write(root.join("initialized/.git"), "gitdir: elsewhere\n").expect("gitfile");
+    std::fs::create_dir(root.join("empty")).expect("uninitialized submodule");
+    let submodule = || IndexEntry::Submodule {
+        commit: "f2bcd31f1c4189995e548ed9f4ddadb147390073".to_owned(),
+    };
+    let index = BTreeMap::from([
+        ("empty".to_owned(), submodule()),
+        ("initialized".to_owned(), submodule()),
+    ]);
+    assert_eq!(
+        submodule_change(root, &index).expect("inspect submodules"),
+        Some("Git submodule empty is not initialized".to_owned())
+    );
 }

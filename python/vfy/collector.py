@@ -163,7 +163,7 @@ class MonitoringCollector:
             monitoring.register_callback(self._tool_id, events.PY_START, self._core.callback_start)
             event_set = events.PY_START
             self._local_instrument_events = events.LINE
-        event_set |= self._configure_legacy_branch_local_events(legacy_branch)
+        event_set |= self._configure_legacy_branch_local_events()
         event_set |= self._register_context_frame_events()
         if self.branch:
             monitoring.register_callback(self._tool_id, events.PY_START, self._core.callback_start)
@@ -226,26 +226,7 @@ class MonitoringCollector:
                     else:
                         event_set |= event
             else:
-                if sys.version_info >= (3, 14):
-                    monitoring.register_callback(
-                        self._tool_id, events.BRANCH_LEFT, self._core.callback_branch
-                    )
-                    monitoring.register_callback(
-                        self._tool_id, events.BRANCH_RIGHT, self._core.callback_branch
-                    )
-                else:
-                    monitoring.register_callback(
-                        self._tool_id, legacy_branch, self._core.callback_branch
-                    )
-                monitoring.register_callback(self._tool_id, events.JUMP, self._core.callback_jump)
-                # LINE events omit repeated execution on one source line.
-                # Backward branch and jump events restore those self-arcs;
-                # the Rust callback discards all other legacy edges unless
-                # semantic collection also needs them.
-                if self._local_legacy_branch_events:
-                    self._local_instrument_events |= legacy_branch | events.JUMP
-                else:
-                    event_set |= legacy_branch | events.JUMP
+                event_set |= self._register_line_arc_events()
         self._instrument_events = event_set
         # A previous collector can leave PY_START or LINE locations disabled
         # on surviving code objects. A new run needs to observe them again.
@@ -254,17 +235,37 @@ class MonitoringCollector:
         if self._local_legacy_branch_events:
             self._instrument_current_frames()
 
-    def _configure_legacy_branch_local_events(self, legacy_branch: int) -> int:
+    def _register_line_arc_events(self) -> int:
+        """Register the events that complete arcs derived from LINE events.
+
+        LINE events omit repeated execution on one source line. A backward
+        JUMP restores that self-arc. CPython 3.12+ branch instructions only
+        jump forward, so branch events are needed only for decision outcomes.
+        Returns the events to enable globally.
+        """
+        monitoring = sys.monitoring
+        events = monitoring.events
+        monitoring.register_callback(self._tool_id, events.JUMP, self._core.callback_jump)
+        line_arc_events = events.JUMP
+        if self.decisions:
+            for event in (
+                (events.BRANCH_LEFT, events.BRANCH_RIGHT)
+                if sys.version_info >= (3, 14)
+                else (events.BRANCH,)
+            ):
+                monitoring.register_callback(self._tool_id, event, self._core.callback_branch)
+                line_arc_events |= event
+        if self._local_legacy_branch_events:
+            self._local_instrument_events |= line_arc_events
+            return events.NO_EVENTS
+        return line_arc_events
+
+    def _configure_legacy_branch_local_events(self) -> int:
         events = sys.monitoring.events
         if not self._local_legacy_branch_events:
             return events.NO_EVENTS
         self._local_instrument_events = (
-            events.LINE
-            | events.PY_RESUME
-            | events.PY_RETURN
-            | events.PY_YIELD
-            | legacy_branch
-            | events.JUMP
+            events.LINE | events.PY_RESUME | events.PY_RETURN | events.PY_YIELD
         )
         return events.PY_START
 

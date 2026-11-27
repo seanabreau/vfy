@@ -332,7 +332,6 @@ impl NativeIndependentSession {
             for fixture in &suite.fixtures {
                 visit.call(&fixture.runtime)?;
                 visit.call(&fixture.definition)?;
-                visit.call(&fixture.ids)?;
                 if let Some(parameters) = &fixture.parameters {
                     for parameter in parameters {
                         visit.call(parameter)?;

@@ -50,15 +50,16 @@ def _differential(project: VfyProject, *arguments: str) -> CommandResult:
 @requires_native_pytest
 @pytest.mark.parametrize("flag", ["--version", "-V"])
 @pytest.mark.parametrize("engine", [(), ("--engine=native",)])
+@pytest.mark.parametrize("coverage", ["--no-cov", "--cov=."])
 def test_owned_version_exits_before_collection_and_plugin_startup(
-    tmp_path: Path, flag: str, engine: tuple[str, ...]
+    tmp_path: Path, flag: str, engine: tuple[str, ...], coverage: str
 ) -> None:
     project = VfyProject(tmp_path)
     project.write("test_version.py", "raise AssertionError('version collected tests')\n")
     project.write("conftest.py", "raise AssertionError('version imported conftest')\n")
     project.write("version_plugin.py", "raise AssertionError('version imported plugin')\n")
 
-    result = project.run_vfy("test", *engine, "--no-cov", "-p", "version_plugin", flag)
+    result = project.run_vfy("test", *engine, coverage, "-p", "version_plugin", flag)
 
     result.expect(0)
     assert result.stdout == f"vfy {VFY_VERSION}\n"

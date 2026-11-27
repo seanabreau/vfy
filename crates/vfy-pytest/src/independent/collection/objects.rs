@@ -2,7 +2,7 @@
 
 use super::arena;
 use crate::hooks::NativeHookRegistry;
-use crate::independent::plugin_fixtures::FixtureOrigin;
+use crate::independent::plugin_fixtures::{ConftestDirectory, FixtureOrigin};
 use crate::independent::{
     ArgumentBinding, Collector, TestBinding, arguments, asyncio, collection, configuration,
     fixtures,
@@ -187,9 +187,15 @@ impl<'py> Collector<'py> {
         }
         for conftest in conftests(&self.conftest_cutoff()?, path) {
             let module = self.import_file(&conftest)?;
-            let baseid = conftest
+            let relative = conftest
                 .parent()
-                .and_then(|directory| directory.strip_prefix(root).ok())
+                .and_then(|directory| directory.strip_prefix(root).ok());
+            let directory = if relative.is_some_and(|path| path.as_os_str().is_empty()) {
+                ConftestDirectory::Rootdir
+            } else {
+                ConftestDirectory::Other
+            };
+            let baseid = relative
                 .unwrap_or(Path::new(""))
                 .to_string_lossy()
                 .into_owned();
@@ -197,7 +203,7 @@ impl<'py> Collector<'py> {
                 module.bind(self.py),
                 &mut chains,
                 &baseid,
-                FixtureOrigin::Conftest,
+                FixtureOrigin::Conftest(directory),
             )?;
         }
         Ok(chains)

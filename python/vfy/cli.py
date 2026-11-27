@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     except PytestConfigurationError as exc:
         print(f"ERROR: {exc}\n", file=sys.stderr)
         return 4
+    except BrokenPipeError:
+        raise  # vfy.entry ends the process quietly.
     except (VfyError, OSError, re.error, ValueError) as exc:
         print(f"vfy: error: {exc}", file=sys.stderr)
         return 1

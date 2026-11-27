@@ -68,6 +68,8 @@ def main(argv: Sequence[str]) -> int:
     except PytestConfigurationError as exc:
         print(f"ERROR: {exc}\n", file=sys.stderr)  # noqa: T201 - CLI diagnostic
         return 4
+    except BrokenPipeError:
+        raise  # vfy.entry ends the process quietly.
     except (VfyError, OSError, re.error, ValueError) as exc:
         print(f"vfy: error: {exc}", file=sys.stderr)  # noqa: T201 - CLI diagnostic
         return 1

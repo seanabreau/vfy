@@ -1,8 +1,10 @@
 # Test asyncio code
 
 `vfy test` runs `async def` tests and fixtures with coverage through its built-in
-adapter. You don't need pytest-asyncio. `vfy test` doesn't load third-party async
-backends such as AnyIO.
+adapter. You don't need pytest-asyncio. The default engine autoloads an
+installed AnyIO pytest plug-in, as it does other installed plug-ins, but
+third-party async backends are outside its compatibility contract; see
+[AnyIO with direct pytest](#use-hypothesis-or-anyio-with-direct-pytest).
 
 ## Run an async test
 

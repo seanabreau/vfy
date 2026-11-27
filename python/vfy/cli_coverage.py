@@ -71,6 +71,10 @@ def _run_python(args: argparse.Namespace) -> int:
                 else:
                     print(exc.code, file=sys.stderr)
                     exit_code = 1
+            except BrokenPipeError as exc:
+                # The measured program may have written to a pipe other than stdout.
+                print(f"vfy: error: {exc}", file=sys.stderr)
+                exit_code = 1
     finally:
         coverage.stop()
         coverage.save()

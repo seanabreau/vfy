@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ pytestmark = pytest.mark.skipif(
 _ARGUMENTS = ("--cov=pkg", "--cov-branch", "--cov-report=", "-q")
 _FULL = "Running the full suite"
 _SKIPPED = "`vfy test --all` runs everything"
+_GIT_UNAVAILABLE = "Git state is unavailable; running the full suite"
 
 
 def _project(root: Path) -> VfyProject:
@@ -484,3 +486,194 @@ def test_independent_coverage_run_without_git_head_runs_the_full_suite(
     assert _FULL in result.stderr
     assert "Git state is unavailable" in result.stderr
     assert (tmp_path / ".coverage").is_file()
+
+
+def _terminal_lines(project: VfyProject, *arguments: str) -> list[str]:
+    """Run vfy with both streams merged, as a terminal shows them."""
+
+    command = (
+        "import subprocess, sys; "
+        "raise SystemExit(subprocess.call([sys.executable, '-m', 'vfy', *sys.argv[1:]], "
+        "stderr=subprocess.STDOUT))"
+    )
+    result = project.run_python("-c", command, *arguments)
+    result.expect(0)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _line_index(lines: list[str], text: str) -> int:
+    return next(index for index, line in enumerate(lines) if text in line)
+
+
+@pytest.mark.parametrize(
+    ("options", "arguments"),
+    [((), ()), ((), ("-q",)), ((), ("--all",)), (("--quiet",), ())],
+    ids=["default", "pytest-quiet", "all", "vfy-quiet"],
+)
+def test_status_lines_precede_the_pytest_summary_outside_git(
+    tmp_path: Path, options: tuple[str, ...], arguments: tuple[str, ...]
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pkg/__init__.py", "")
+    project.write("pkg/a.py", "def value():\n    return 1\n")
+    project.write(
+        "tests/test_a.py", "from pkg.a import value\n\ndef test_a():\n    assert value() == 1\n"
+    )
+
+    lines = _terminal_lines(
+        project, *options, "test", "--engine=native", *arguments, "--cov=pkg", "--cov-report="
+    )
+
+    assert "1 passed in " in lines[-1], lines
+    status = [line for line in lines if line in {_FULL, f"Note: {_GIT_UNAVAILABLE}"}]
+    if options:
+        assert status == []
+    elif "--all" in arguments:
+        assert status == [_FULL]
+        assert "Note: the complete suite was requested" in lines
+    else:
+        assert status == [_FULL, f"Note: {_GIT_UNAVAILABLE}"]
+
+
+def test_selected_rerun_reports_its_plan_before_the_pytest_session(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    arguments = ("test", "--engine=native", "--cov=pkg", "--cov-report=")
+    _terminal_lines(project, *arguments)
+    project.write("pkg/a.py", "def value():\n    return 1 + 0\n")
+
+    lines = _terminal_lines(project, *arguments)
+
+    summary = _line_index(lines, "1 passed in ")
+    selected = lines.index("Selected 1 / 2 tests (from the saved baseline; collection follows)")
+    assert selected < _line_index(lines, "test session starts")
+    assert _SKIPPED in lines[:summary]
+    # Reuse is decided from the completed results, after pytest's summary.
+    assert [line.split(";")[0] for line in lines[summary + 1 :]] == ["Reused 1 tests"]
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ("modified", "Git submodule data has uncommitted changes"),
+        ("checkout", "Git submodule data is not checked out at its recorded commit"),
+        ("deinit", "Git submodule data is not initialized"),
+    ],
+)
+def test_submodule_selects_by_recorded_commit_and_runs_everything_when_it_differs(
+    tmp_path: Path, change: str, reason: str
+) -> None:
+    origin = VfyProject(tmp_path / "origin")
+    origin.write("value.txt", "1\n")
+    origin.git_init()
+    project = _project(tmp_path / "project")
+    project.run(
+        "git",
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(origin.root),
+        "data",
+    ).expect(0)
+    project.git_commit("Add a data submodule")
+
+    def run(*arguments: str) -> CommandResult:
+        return project.run_vfy("test", "--engine=native", *arguments, *_ARGUMENTS)
+
+    project.run("git", "config", "submodule.data.ignore", "all").expect(0)
+    complete = run("--all")
+    complete.expect(0)
+    assert "2 passed" in complete.stdout
+    project.write("pkg/a.py", "def value():\n    return 1 + 0\n")
+    selected = run()
+    selected.expect(0)
+    assert "Selected 1 / 2 tests" in selected.stderr
+    if change == "modified":
+        project.write("data/value.txt", "2\n")
+    elif change == "checkout":
+        identity = ("-c", "user.name=vfy Tests", "-c", "user.email=vfy-tests@example.invalid")
+        project.run(
+            "git", "-C", "data", *identity, "commit", "-q", "--allow-empty", "-m", "Bump"
+        ).expect(0)
+    else:
+        project.run("git", "submodule", "deinit", "-q", "-f", "data").expect(0)
+
+    changed = run()
+
+    changed.expect(0)
+    assert "2 passed" in changed.stdout
+    assert _FULL in changed.stderr
+    assert reason in changed.stderr
+
+
+def test_uninitialized_submodule_cannot_seed_replay(tmp_path: Path) -> None:
+    origin = VfyProject(tmp_path / "origin")
+    origin.write("value.txt", "2\n")
+    origin.git_init()
+    project = _project(tmp_path / "project")
+    project.write(
+        "tests/test_b.py",
+        "from pathlib import Path\n\n"
+        "def test_b():\n"
+        "    path = Path('data/value.txt')\n"
+        "    assert not path.exists() or path.read_text() == '1\\n'\n",
+    )
+    project.run(
+        "git",
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(origin.root),
+        "data",
+    ).expect(0)
+    project.git_commit("Add a data submodule")
+    project.run("git", "submodule", "deinit", "-q", "-f", "data").expect(0)
+    project.run_vfy("test", "--engine=pytest-native", "--all", *_ARGUMENTS).expect(0)
+    project.run(
+        "git", "-c", "protocol.file.allow=always", "submodule", "update", "--init", "-q"
+    ).expect(0)
+
+    result = project.run_vfy("test", "--engine=pytest-native", *_ARGUMENTS)
+
+    result.expect(1)
+    assert "test_b" in result.stdout
+
+
+def test_bytecode_rewritten_during_collection_is_not_a_source_change(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.run_vfy("test", "--engine=native", *_ARGUMENTS).expect(0)
+    project.run("git", "add", "--force", "pkg/__pycache__", "tests/__pycache__").expect(0)
+    project.git_commit("Track bytecode")
+    tracked = project.run("git", "ls-files", "*.pyc").expect(0).stdout.split()
+    assert any("-vfy-" in path for path in tracked), tracked
+    # A fresh checkout gives sources new modification times, so CPython and
+    # vfy's assertion rewriting both rewrite the tracked bytecode on import.
+    for source in (*tmp_path.glob("pkg/*.py"), *tmp_path.glob("tests/*.py")):
+        os.utime(source, (source.stat().st_atime, source.stat().st_mtime + 60))
+
+    rerun = project.run_vfy("test", "--engine=native", *_ARGUMENTS)
+
+    rerun.expect(0)
+    assert "2 passed" in rerun.stdout
+    rewritten = project.run("git", "diff", "--name-only", "--", "*.pyc").expect(0).stdout
+    assert "-vfy-" in rewritten, "the run must rewrite vfy's tracked bytecode"
+
+
+def test_ci_plan_cannot_overwrite_tracked_bytecode(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    cache = "pkg/__pycache__/tracked.pyc"
+    project.write(cache, "tracked file\n")
+    project.run("git", "add", "--force", cache).expect(0)
+    project.git_commit("Track a bytecode file")
+
+    result = project.run_vfy(
+        "test", "--engine=native", "--all", "--plan-output", cache, *_ARGUMENTS
+    )
+
+    result.expect(1)
+    assert "CI outputs cannot replace tracked source files" in result.stderr
+    assert (tmp_path / cache).read_text() == "tracked file\n"
+    assert not (tmp_path / ".coverage").exists()

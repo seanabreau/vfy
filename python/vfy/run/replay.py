@@ -410,10 +410,11 @@ def _replay_evidence(
     )
     expected_identity = getattr(args, "_watch_input_identity", None)
     baseline: CoverageStore | None = None
-    baseline_reason: str | None = None
+    baseline_reason = state.submodule_change
     if (
         invocation.replay_enabled
         and git_available
+        and state.submodule_change is None
         and not args.fresh
         and not getattr(args, "baseline", None)
     ):

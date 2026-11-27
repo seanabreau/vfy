@@ -5,7 +5,7 @@ use super::{CollectedSuite, FixtureBinding};
 use crate::module_cache::Module;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use vfy_core::FixtureScope;
 use vfy_core::test_plan::FixturePlan;
 
@@ -125,6 +125,14 @@ pub(super) fn direct_binding(
         .import("vfy._native._pytest")?
         .getattr("direct_parameter")?
         .unbind();
+    let origin = super::plugin_fixtures::FixtureOrigin::DirectParameter;
+    // Like pytest's DirectParamFixtureDef, the definition declares no parameters of its own.
+    let attributes = super::fixture_binding::FixtureDefinitionAttributes {
+        argnames: PyTuple::new(py, &fixture.dependencies)?.unbind(),
+        baseid: origin.public_baseid(&fixture.package_baseid).to_owned(),
+        params: py.None(),
+        ids: py.None(),
+    };
     Ok(FixtureBinding {
         definition: callable.clone_ref(py),
         runtime: super::fixture_binding::NativeFixtureBinding::new(
@@ -133,11 +141,11 @@ pub(super) fn direct_binding(
             fixture.name.clone(),
             fixture.declared_scope,
             callable,
+            attributes,
         )?,
         autouse: false,
-        origin: super::plugin_fixtures::FixtureOrigin::DirectParameter,
+        origin,
         parameters: None,
-        ids: None,
     })
 }
 
