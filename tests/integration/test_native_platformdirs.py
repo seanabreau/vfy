@@ -6,7 +6,7 @@ import json
 import shutil
 import sys
 import venv
-from importlib.metadata import distribution, entry_points, version
+from importlib.metadata import distribution, entry_points
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -232,19 +232,19 @@ def test_platformdirs_shadow_plugin_is_rejected_before_collection(
     options = [] if declaration else ["-p", plugin_name]
     completed = project.run_vfy("test", "--engine=pytest-native", "--no-cov", *options, "-q")
     assert completed.returncode != 0, completed.stdout + completed.stderr
-    assert "requires the installed upstream Platformdirs plugin from 4.12.0-4.12.3" in (
+    assert "requires the installed upstream Platformdirs plugin" in (
         completed.stdout + completed.stderr
     )
     assert not (project.root / "collected").exists()
 
 
 @pytest.mark.parametrize(
-    ("installed_version", "plugin_reviewed"),
-    [("4.12.0", True), ("4.12.3", True), ("4.12.0", False)],
+    ("version_override", "plugin_reviewed"),
+    [(None, True), ("99.0", True), (None, False)],
     ids=["reviewed", "later-release-same-plugin", "changed-plugin"],
 )
 def test_platformdirs_editable_install_identity_is_checked_before_collection(
-    tmp_path: Path, installed_version: str, *, plugin_reviewed: bool
+    tmp_path: Path, version_override: str | None, *, plugin_reviewed: bool
 ) -> None:
     project = VfyProject(tmp_path)
     source = project.root / "src/platformdirs"
@@ -259,15 +259,18 @@ def test_platformdirs_editable_install_identity_is_checked_before_collection(
     site = (
         environment / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
     )
+    installed = distribution("platformdirs")
+    installed_version = version_override or installed.version
     metadata = site / f"platformdirs-{installed_version}.dist-info"
     metadata.mkdir()
-    installed = distribution("platformdirs")
     upstream_metadata = installed.read_text("METADATA")
     upstream_entrypoints = installed.read_text("entry_points.txt")
     assert upstream_metadata is not None
     assert upstream_entrypoints is not None
     (metadata / "METADATA").write_text(
-        upstream_metadata.replace("Version: 4.12.0", f"Version: {installed_version}")
+        upstream_metadata.replace(
+            f"Version: {installed.version}\n", f"Version: {installed_version}\n"
+        )
     )
     (metadata / "entry_points.txt").write_text(upstream_entrypoints)
     (metadata / "direct_url.json").write_text(
@@ -311,16 +314,13 @@ def test_platformdirs_editable_install_identity_is_checked_before_collection(
         assert "1 passed" in completed.stdout
     else:
         assert completed.returncode != 0, completed.stdout + completed.stderr
-        assert "requires the Platformdirs pytest plugin from 4.12.0-4.12.3" in (
-            completed.stdout + completed.stderr
-        )
+        assert "requires the Platformdirs pytest plugin" in (completed.stdout + completed.stderr)
         assert "-p no:platformdirs" in completed.stdout + completed.stderr
         assert not (project.root / "collected").exists()
 
 
 @pytest.mark.skipif(find_spec("xdist") is None, reason="xdist is optional")
 def test_platformdirs_fixture_isolation_and_cleanup_match_stock_workers(tmp_path: Path) -> None:
-    assert version("platformdirs") == "4.12.0"
     records = {}
     for route in ("stock", "exec", "fork"):
         project = VfyProject(tmp_path / route)
@@ -440,7 +440,6 @@ def test_isolated(case, platformdirs_isolated, tmp_path, request):
 
 @pytest.mark.parametrize("hook_name", ["pytest_runtest_call", "pytest_addoption"])
 def test_platformdirs_plugin_still_rejects_unreviewed_hooks(tmp_path: Path, hook_name: str) -> None:
-    assert version("platformdirs") == "4.12.0"
     project = VfyProject(tmp_path)
     project.write(
         "conftest.py",

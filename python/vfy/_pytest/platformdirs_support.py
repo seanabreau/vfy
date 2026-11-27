@@ -14,10 +14,19 @@ if TYPE_CHECKING:
 
 PLATFORMDIRS_PLUGIN_MODULE = "platformdirs.pytest_plugin"
 PLATFORMDIRS_PLUGIN_NAMES = frozenset({"platformdirs", PLATFORMDIRS_PLUGIN_MODULE})
-PLATFORMDIRS_REVIEWED_VERSIONS = "4.12.0-4.12.3"
-# Platformdirs releases its fixture module unchanged across patch releases, so
-# the reviewed bytes, not the distribution version, identify the adapter.
-_REVIEWED_PLUGIN_SHA256 = "909672c61917b3284cc0c4369a3a8d284049782c3fb26ecbe058bb2a42c68e2c"
+PLATFORMDIRS_REVIEWED_VERSIONS = "4.12.0-4.14.9"
+# Multiple Platformdirs releases ship the same fixture module. Check its
+# bytes so a distribution version cannot authorize a changed plug-in.
+_REVIEWED_PLUGIN_SHA256 = frozenset(
+    {
+        # 4.12.0 through 4.14.5
+        "909672c61917b3284cc0c4369a3a8d284049782c3fb26ecbe058bb2a42c68e2c",
+        # 4.14.6 and 4.14.7
+        "25b54d8901ceb7d0303aa95cf0a193e0f5f75f417bb2c5120d7c77f0914783ed",
+        # 4.14.8 and 4.14.9
+        "7de44bb7e02fd960481045c55f4a2ae98205da89a5e90d874ee479827a464841",
+    }
+)
 
 
 def platformdirs_plugin_reviewed() -> bool:
@@ -62,7 +71,7 @@ def _reviewed_bytes(origin: Path) -> bool:
         content = origin.read_bytes()
     except OSError:
         return False
-    return hashlib.sha256(content).hexdigest() == _REVIEWED_PLUGIN_SHA256
+    return hashlib.sha256(content).hexdigest() in _REVIEWED_PLUGIN_SHA256
 
 
 def _installed_plugin_path(installed: Distribution) -> Path | None:
