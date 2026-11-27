@@ -170,6 +170,35 @@ def test_invalid_asyncio_marker_names_the_test(
         assert "Traceback" not in result.stdout + result.stderr
 
 
+@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
+def test_invalid_parameter_loop_scope_names_the_case(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = function\n")
+    project.write(
+        "test_async.py",
+        """import pytest
+
+@pytest.mark.parametrize('value', [
+    pytest.param(1, id='invalid', marks=pytest.mark.asyncio(loop_scope='bad')),
+])
+async def test_async(value):
+    pass
+""",
+    )
+    options = ("-q", "-p", "asyncio")
+    stock = project.run_python("-m", "pytest", *options)
+    stock.expect(1)
+    assert "fixture '_bad_scoped_runner' not found" in stock.stdout
+    assert "ERROR test_async.py::test_async[invalid]" in stock.stdout
+
+    independent = project.run_vfy("test", "--engine=native", "--no-cov", *options)
+    independent.expect(2)
+    assert "test_async.py::test_async[invalid]: mark.asyncio got an unexpected loop scope" in (
+        independent.stdout
+    )
+    assert "Traceback" not in independent.stdout + independent.stderr
+
+
 @pytest.mark.parametrize("unsupported", ["1.4.0.post1", "1.4.1.post2", "1.4.2", "1.5.1"])
 def test_unverified_asyncio_versions_are_rejected_before_collection(
     tmp_path: Path, unsupported: str

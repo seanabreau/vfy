@@ -190,7 +190,7 @@ impl Executor {
                 let item = item
                     .ok_or_else(|| PyAssertionError::new_err("test item is unavailable"))?
                     .bind(py);
-                let scope = asyncio::live_test_scope(Some(&suite.context), py, item)?;
+                let scope = asyncio::live_test_scope(Some(&suite.context), item, &test.nodeid)?;
                 let Some(scope) = scope else {
                     return asyncio::unhandled_test(py);
                 };
