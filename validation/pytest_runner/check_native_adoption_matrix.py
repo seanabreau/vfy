@@ -107,7 +107,13 @@ SIMPLE_PROJECTS = (
         "6abdcf6ca167f5d61297b5d86e22f3dd058031b3",
         "src",
         ("testing",),
-        ("--cov=pluggy",),
+        # The comparison fixes the source package. Pluggy's run.include then emits
+        # a warning that its strict pytest configuration would promote to an error.
+        (
+            "--cov=pluggy",
+            "-W",
+            "ignore:--include is ignored because --source is set:vfy.errors.CoverageWarning",
+        ),
     ),
     Project(
         "packaging",
