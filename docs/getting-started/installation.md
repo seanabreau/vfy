@@ -18,6 +18,9 @@ the optional `--engine=pytest-native` route, install `vfy[pytest]`. On that rout
 pytest collects the tests and vfy runs them. See [Compatibility](../about/compatibility.md) for supported versions,
 plug-ins, and `conftest.py` hooks.
 
+If your project already runs pytest, follow [Adopt vfy in an existing project](adopt-vfy.md)
+to keep your Python support range and compare the runner and coverage separately.
+
 ## Install from PyPI
 
 From your project directory, next to `pyproject.toml`, run:

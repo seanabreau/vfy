@@ -17,6 +17,7 @@ from tests.support.vfy_project import CommandResult, VfyProject
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
+ADOPTION = "getting-started/adopt-vfy.md"
 TUTORIAL = "getting-started/quickstart.md"
 SELECTION = "getting-started/selection.md"
 API = "reference/python-api.md"
@@ -52,12 +53,26 @@ def project(tmp_path: Path) -> VfyProject:
     return VfyProject(tmp_path)
 
 
-def commands(project: VfyProject, page: str, name: str, *, status: int = 0) -> list[CommandResult]:
+def commands(
+    project: VfyProject,
+    page: str,
+    name: str,
+    *,
+    status: int = 0,
+    env: dict[str, str | None] | None = None,
+) -> list[CommandResult]:
     """Use the installed interpreter in place of uv's environment dispatch."""
     results = []
     for line in block(page, name).splitlines():
         args = shlex.split(line)
+        environment = dict(env or {})
+        while args and "=" in args[0]:
+            key, value = args.pop(0).split("=", 1)
+            assert key.isidentifier(), f"{page}/{name}: invalid environment variable {key}"
+            environment[key] = value
         assert args, f"{page}/{name}: expected a command"
+        if args[:3] == ["uv", "run", "--python"]:
+            del args[2:4]
         if (
             page == MUTATION
             and sys.platform == "darwin"
@@ -67,14 +82,16 @@ def commands(project: VfyProject, page: str, name: str, *, status: int = 0) -> l
             if not any(arg.startswith("--engine") for arg in args):
                 args.insert(4, "--engine=pytest-native")
         if args[:3] == ["uv", "run", "vfy"]:
-            result = project.run_vfy(*args[3:])
+            result = project.run_vfy(*args[3:], env=environment)
         elif args[:3] == ["uv", "run", "pytest"]:
-            result = project.run_pytest(*args[3:], load_xdist=False)
+            result = project.run_pytest(*args[3:], env=environment, load_xdist=False)
+        elif args[:3] == ["uv", "run", "coverage"]:
+            result = project.run_coverage_py(*args[3:], env=environment)
         elif args[0] == "vfy":
-            result = project.run_vfy(*args[1:])
+            result = project.run_vfy(*args[1:], env=environment)
         else:
-            assert args[0] == "git", f"unsupported tutorial command: {line}"
-            result = project.run(*args)
+            assert args[0] in {"git", "mkdir"}, f"unsupported tutorial command: {line}"
+            result = project.run(*args, env=environment)
         assert result.returncode == status, (page, name, line, result)
         results.append(result)
     return results
@@ -162,6 +179,68 @@ def test_adoption_comparison_runs_the_requested_scope(project: VfyProject) -> No
     assert "2 passed" in stock.stdout
     assert "2 passed" in native.stdout
     assert not (project.root / ".coverage").exists()
+
+
+@requires_native_test_engine
+def test_staged_adoption_preserves_coverage_artifacts(project: VfyProject) -> None:
+    config = project.root / "pyproject.toml"
+    config.write_text(
+        config.read_text().replace(
+            "[tool.coverage.report]\n", "[tool.coverage.report]\nfail_under = 93\nprecision = 2\n"
+        )
+    )
+    project.write(
+        "pytest.ini",
+        "[pytest]\npythonpath = src\n"
+        "addopts = --cov=tests --cov-report=xml:coverage.xml --cov-report=html:htmlcov\n",
+    )
+    env: dict[str, str | None] = {
+        "PYTEST_ADDOPTS": "-k 'not test_format_count' --cov-report=json:coverage.json",
+        "COVERAGE_FILE": ".coverage",
+    }
+    original_artifacts = [
+        project.write(path, "original CI result\n")
+        for path in (".coverage", "coverage.xml", "htmlcov/index.html", "coverage.json")
+    ]
+    expected_nodes = {
+        "tests/test_bounds.py::test_positive_value",
+        "tests/test_formatting.py::test_format_count",
+    }
+
+    for result in commands(project, ADOPTION, "compare-runners", env=env):
+        assert passed_nodes(result) == expected_nodes
+    assert sorted(project.root.glob(".coverage*")) == [project.root / ".coverage"]
+
+    commands(project, ADOPTION, "prepare-coverage-directories")
+    for result in commands(project, ADOPTION, "compare-collectors", status=1, env=env):
+        assert passed_nodes(result) == expected_nodes
+        assert "total of 80 is less than fail-under=93" in result.stdout + result.stderr
+    pytest_cov = evidence(project, ".vfy-adoption/pytest-cov.data")
+    assert pytest_cov == evidence(project, ".vfy-adoption/vfy.data")
+    assert sorted(pytest_cov) == ["src/bounds.py", "src/formatting.py"]
+    assert (5, 6) not in pytest_cov["src/bounds.py"]["arcs"]
+    for result in commands(project, ADOPTION, "compare-reporters", status=2, env=env):
+        assert "80%" in result.stdout
+
+    stock_run, vfy_run, _, _ = commands(project, ADOPTION, "compare-coverage-commands", env=env)
+    assert passed_nodes(stock_run) == passed_nodes(vfy_run) == expected_nodes
+    assert evidence(project, ".vfy-adoption/coverage-py.data") == evidence(
+        project, ".vfy-adoption/vfy-run.data"
+    )
+    for lane in ("pytest-cov", "vfy", "coverage-py", "vfy-run"):
+        xml = ET.parse(project.root / ".vfy-adoption" / f"{lane}.xml").getroot()
+        assert float(xml.attrib["line-rate"]) == 0.875
+        assert float(xml.attrib["branch-rate"]) == 0.5
+
+    project.write("tests/test_bounds.py", block(TUTORIAL, "complete-tests"))
+    expected_nodes.add("tests/test_bounds.py::test_negative_value")
+    for result in commands(project, ADOPTION, "compare-collectors", env=env):
+        assert passed_nodes(result) == expected_nodes
+        assert "100%" in result.stdout
+    for result in (project.run_coverage_py("combine"), project.run_vfy("coverage", "combine")):
+        assert result.returncode == 1, result
+        assert "No data to combine" in result.stdout + result.stderr
+    assert all(path.read_text() == "original CI result\n" for path in original_artifacts)
 
 
 @requires_native_test_engine
