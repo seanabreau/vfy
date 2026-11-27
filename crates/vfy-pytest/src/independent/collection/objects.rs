@@ -244,7 +244,6 @@ impl<'py> Collector<'py> {
     pub(in crate::independent) fn add_custom_item(
         &mut self,
         id: arena::CollectionNodeId,
-        parent: arena::CollectionNodeId,
         source_file: Option<&Path>,
     ) -> PyResult<()> {
         let arena = arena::for_context(
@@ -253,21 +252,27 @@ impl<'py> Collector<'py> {
                 .as_ref()
                 .ok_or_else(|| PyRuntimeError::new_err("item collection requires a session"))?,
         )?;
-        let (item, path) = {
+        let (item, fixture_owner, path) = {
             let arena = arena.borrow();
-            (arena.object(self.py, id)?, arena.path(id)?.to_path_buf())
+            let (owner, path) = match source_file {
+                // The item may inherit its directory's path. Use the file offered
+                // to the hook to establish the chain for explicit fixture lookups.
+                Some(path) => (id, path),
+                None => (
+                    arena.scope_owner(id, vfy_core::FixtureScope::Module, "")?,
+                    arena.path(id)?,
+                ),
+            };
+            (arena.object(self.py, id)?, owner, path.to_path_buf())
         };
         let item = item.bind(self.py);
-        // A file hook can return an item whose path is inherited from its directory.
-        // Use the hook's file for conftest visibility and the item for plan ownership.
-        let fixture_owner = if source_file.is_some() { id } else { parent };
         let owner_nodeid = arena
             .borrow()
             .object(self.py, fixture_owner)?
             .bind(self.py)
             .getattr("nodeid")?
             .extract::<String>()?;
-        let chains = self.custom_fixture_chains(fixture_owner, source_file.unwrap_or(&path))?;
+        let chains = self.custom_fixture_chains(fixture_owner, &path)?;
         let marks = PyList::empty(self.py);
         for mark in item.call_method0("iter_markers")?.try_iter()? {
             marks.append(mark?)?;
@@ -275,14 +280,12 @@ impl<'py> Collector<'py> {
         if let Some(context) = &self.context {
             configuration::markers(self.py, context, &marks)?;
         }
-        // Pytest leaves fixture activation to items returned directly by a file hook.
-        let mut eager = if source_file.is_some() {
-            Vec::new()
-        } else {
-            self.eager_fixtures(&chains, &marks)?
-        };
-        if let Some(declared) = item.getattr_opt("fixturenames")? {
-            eager.extend(declared.extract::<Vec<String>>()?);
+        let mut eager = Vec::new();
+        if source_file.is_none() {
+            eager = self.eager_fixtures(&chains, &marks)?;
+            if let Some(declared) = item.getattr_opt("fixturenames")? {
+                eager.extend(declared.extract::<Vec<String>>()?);
+            }
         }
         let test = TestPlan {
             id: TestId::from_index(self.tests.len()),
@@ -299,10 +302,12 @@ impl<'py> Collector<'py> {
                 class: None,
             },
         };
-        item.setattr(
-            "fixturenames",
-            crate::independent::lifecycle::nodes::fixture_names(&test, &self.fixtures),
-        )?;
+        if source_file.is_none() {
+            item.setattr(
+                "fixturenames",
+                crate::independent::lifecycle::nodes::fixture_names(&test, &self.fixtures),
+            )?;
+        }
         let binding = TestBinding {
             collection_node: id,
             provider_scope: 0,

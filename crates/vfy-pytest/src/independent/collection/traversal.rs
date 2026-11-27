@@ -219,7 +219,7 @@ impl Traversal<'_, '_> {
             .expect("configured collection session");
         let id = arena::custom(self.collector.py, context, parent, object)?;
         if self.kind(id)? == CollectionNodeKind::CustomItem {
-            self.collector.add_custom_item(id, parent, source_file)?;
+            self.collector.add_custom_item(id, source_file)?;
         }
         Ok(id)
     }

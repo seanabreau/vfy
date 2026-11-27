@@ -672,7 +672,12 @@ def module_fixture(request):
 
 
 class DirectItem(pytest.Item):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.fixturenames = ['module_fixture']
+
     def runtest(self):
+        assert self.fixturenames == ['module_fixture']
         with Path('executed').open('a', encoding='utf-8') as stream:
             stream.write(self.nodeid + '\\n')
 

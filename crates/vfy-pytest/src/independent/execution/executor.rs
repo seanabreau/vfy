@@ -21,7 +21,7 @@ use pyo3::types::{PyDict, PyList, PyWeakrefMethods, PyWeakrefReference};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Mutex;
-use vfy_core::test_plan::TestPlan;
+use vfy_core::test_plan::{TestBody, TestPlan};
 use vfy_core::{CollectionNodeId, FixtureCacheIdentity, FixtureCacheKey, FixtureScope};
 
 pub(super) struct Executor {
@@ -72,12 +72,19 @@ impl Executor {
     pub(super) fn begin_test(&self, py: Python<'_>, index: usize) -> PyResult<RequestContext> {
         let suite = self.suite()?;
         let test = &suite.plan.tests()[index];
-        let owner = self.collection_arena(py)?.borrow().scope_owner(
-            collection_node(test)?,
-            FixtureScope::Function,
-            "",
-        )?;
-        let mut names = if let Some(item) = collected_item(&suite, index) {
+        let node = collection_node(test)?;
+        let (owner, direct_item) = {
+            let arena = self.collection_arena(py)?;
+            let arena = arena.borrow();
+            (
+                arena.scope_owner(node, FixtureScope::Function, "")?,
+                test.body == TestBody::Item && arena.is_file_hook_item(node)?,
+            )
+        };
+        // A bare Item owns its setup. Its plug-in may use fixturenames as metadata.
+        let mut names = if direct_item {
+            Vec::new()
+        } else if let Some(item) = collected_item(&suite, index) {
             item.bind(py)
                 .getattr(pyo3::intern!(py, "fixturenames"))?
                 .extract::<Vec<String>>()?
