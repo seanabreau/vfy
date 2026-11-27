@@ -1,4 +1,5 @@
 const VALID_SCOPES: [&str; 5] = ["function", "class", "module", "package", "session"];
+const FIXTURE_CACHING_SCOPE: &str = "fixture-scope";
 
 /// Discovery policy for coroutine tests and fixtures.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,6 +69,7 @@ impl AsyncioLoopScope {
 }
 
 /// Select the effective loop scope using explicit, configured, then fixture scope precedence.
+/// A configured `fixture-scope` uses the fixture's caching scope.
 ///
 /// # Errors
 ///
@@ -77,6 +79,7 @@ pub fn plan_asyncio_loop_scope(
     configured: Option<&str>,
     fixture_scope: &str,
 ) -> Result<AsyncioLoopScope, String> {
+    let configured = configured.filter(|&scope| scope != FIXTURE_CACHING_SCOPE);
     AsyncioLoopScope::parse(explicit.or(configured).unwrap_or(fixture_scope))
 }
 
@@ -91,10 +94,11 @@ pub fn validate_asyncio_config(
     default_test_loop_scope: &str,
 ) -> Result<(), String> {
     AsyncioMode::parse(mode)?;
-    if let Some(scope) = default_fixture_loop_scope {
+    if let Some(scope) = default_fixture_loop_scope.filter(|&scope| scope != FIXTURE_CACHING_SCOPE)
+    {
         AsyncioLoopScope::parse(scope).map_err(|_| {
             format!(
-                "'{scope}' is not a valid asyncio_default_fixture_loop_scope. Valid scopes are: {}.",
+                "'{scope}' is not a valid asyncio_default_fixture_loop_scope. Valid scopes are: {}, {FIXTURE_CACHING_SCOPE}.",
                 VALID_SCOPES.join(", ")
             )
         })?;

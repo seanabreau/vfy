@@ -155,9 +155,12 @@ fn asyncio_distribution(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
     let distribution = installed_distribution(py, "pytest-asyncio")?;
     if let Some(distribution) = &distribution {
         let version = distribution.getattr("version")?.extract::<String>()?;
-        if !matches!(version.as_str(), "1.4.0" | "1.4.1" | "1.4.1.post1") {
+        if !matches!(
+            version.as_str(),
+            "1.4.0" | "1.4.1" | "1.4.1.post1" | "1.5.0"
+        ) {
             return Err(crate::UnsupportedFeatureError::new_err(format!(
-                "the independent asyncio adapter requires pytest-asyncio 1.4.0, 1.4.1, or 1.4.1.post1; found {version}"
+                "the independent asyncio adapter requires pytest-asyncio 1.4.0, 1.4.1, 1.4.1.post1, or 1.5.0; found {version}"
             )));
         }
     }

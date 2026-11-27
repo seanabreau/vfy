@@ -16,7 +16,6 @@ pytestmark = requires_native_pytest
 
 def test_installed_asyncio_version_and_fixture_lifecycle_match_reference(tmp_path: Path) -> None:
     installed = version("pytest-asyncio")
-    assert installed in {"1.4.0", "1.4.1", "1.4.1.post1"}
     observations = []
     for route in ("stock", "independent"):
         project = VfyProject(tmp_path / route)
@@ -69,7 +68,109 @@ async def test_async(resource, request):
     assert observations == [([installed] * 3, "setup\ntest\nteardown\n")] * 2
 
 
-@pytest.mark.parametrize("unsupported", ["1.4.0.post1", "1.4.1.post2", "1.4.2"])
+@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
+@pytest.mark.parametrize("workers", [1, 2])
+def test_default_fixture_scope_matches_caching_scope(tmp_path: Path, workers: int) -> None:
+    for route in ("stock", "independent"):
+        project = VfyProject(tmp_path / route)
+        project.write(
+            "pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = fixture-scope\n"
+        )
+        for name in ("test_first", "test_second"):
+            project.write(
+                f"{name}.py",
+                """import asyncio
+import os
+from pathlib import Path
+
+import pytest
+import pytest_asyncio
+
+events = Path(__name__ + '.events')
+
+@pytest_asyncio.fixture(scope='module')
+async def module_loop():
+    loop = asyncio.get_running_loop()
+    events.with_suffix('.pid').write_text(str(os.getpid()))
+    events.write_text('setup\\n')
+    yield loop
+    assert asyncio.get_running_loop() is loop
+    with events.open('a') as output:
+        output.write('teardown\\n')
+
+@pytest_asyncio.fixture(scope='module', loop_scope='session')
+async def explicit_loop():
+    return asyncio.get_running_loop()
+
+@pytest.mark.asyncio(loop_scope='module')
+@pytest.mark.parametrize('case', ['a', 'b'])
+async def test_loop(module_loop, explicit_loop, case):
+    assert asyncio.get_running_loop() is module_loop
+    assert explicit_loop is not module_loop
+    with events.open('a') as output:
+        output.write(case + '\\n')
+""",
+            )
+        options = ("-q", "-p", "asyncio", "-W", "error")
+        result = (
+            project.run_python("-m", "pytest", *options)
+            if route == "stock"
+            else project.run_vfy(
+                "test",
+                "--engine=native",
+                "--no-cov",
+                f"--workers={workers}",
+                "--native-scheduling=file",
+                "--native-result-json=results.json",
+                *options,
+            )
+        )
+        result.expect(0)
+        assert "4 passed" in result.stdout
+        for name in ("test_first", "test_second"):
+            assert (project.root / f"{name}.events").read_text() == "setup\na\nb\nteardown\n"
+        if route == "independent" and workers == 2:
+            worker_pids = {
+                int((project.root / f"{name}.pid").read_text())
+                for name in ("test_first", "test_second")
+            }
+            assert len(worker_pids) == 2
+            topology = json.loads((project.root / "results.json").read_text())["execution_topology"]
+            assert set(topology["worker_pids"]) == worker_pids
+
+
+@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            "loop_scope='fixture-scope'",
+            "got an unexpected loop scope value 'fixture-scope'. "
+            "Valid scopes are: function, class, module, package, session.",
+        ),
+        ("'module'", "accepts only keyword arguments 'loop_scope' and 'loop_factories'."),
+        ("unexpected=True", "accepts only keyword arguments 'loop_scope' and 'loop_factories'."),
+    ],
+)
+def test_invalid_asyncio_marker_names_the_test(
+    tmp_path: Path, arguments: str, message: str
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = function\n")
+    project.write(
+        "test_async.py",
+        f"import pytest\n@pytest.mark.asyncio({arguments})\nasync def test_invalid():\n    pass\n",
+    )
+    options = ("-q", "-p", "asyncio")
+    stock = project.run_python("-m", "pytest", *options)
+    independent = project.run_vfy("test", "--engine=native", "--no-cov", *options)
+    for result in (stock, independent):
+        result.expect(2)
+        assert f"test_async.py::test_invalid: mark.asyncio {message}" in result.stdout
+        assert "Traceback" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("unsupported", ["1.4.0.post1", "1.4.1.post2", "1.4.2", "1.5.1"])
 def test_unverified_asyncio_versions_are_rejected_before_collection(
     tmp_path: Path, unsupported: str
 ) -> None:
@@ -83,7 +184,7 @@ def test_unverified_asyncio_versions_are_rejected_before_collection(
     project.write("test_body.py", "from pathlib import Path\nPath('collected').touch()\n")
     result = project.run_vfy("test", "--engine=native", "--no-cov", "-q", "-p", "asyncio")
     assert result.returncode != 0, result.stdout + result.stderr
-    assert f"requires pytest-asyncio 1.4.0, 1.4.1, or 1.4.1.post1; found {unsupported}" in (
+    assert f"1.4.0, 1.4.1, 1.4.1.post1, or 1.5.0; found {unsupported}" in (
         result.stdout + result.stderr
     )
     assert not (project.root / "collected").exists()

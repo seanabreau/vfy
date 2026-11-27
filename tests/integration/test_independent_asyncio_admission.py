@@ -117,6 +117,6 @@ async def test_body():
         assert "async def functions are not natively supported" in output
     else:
         assert result.returncode != 0, output
-        assert "requires pytest-asyncio 1.4.0, 1.4.1, or 1.4.1.post1; found 0.0" in output
+        assert "requires pytest-asyncio 1.4.0, 1.4.1, 1.4.1.post1, or 1.5.0; found 0.0" in output
     assert (tmp_path / "awaited").exists() is (plugin is None)
     assert not (tmp_path / "upstream-imported").exists()

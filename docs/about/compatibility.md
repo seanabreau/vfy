@@ -25,7 +25,7 @@ older, and PyPy, are unsupported.
 | pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
 | pytest-html | `4.2.0` (integration) | 4.2.0 |
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
-| pytest-asyncio | `1.4.0`, `1.4.1`, `1.4.1.post1` (independent adapter admission) | 1.4.0 and 1.4.1.post1 differentials |
+| pytest-asyncio | `1.4.0`, `1.4.1`, `1.4.1.post1`, `1.5.0` (independent adapter admission) | 1.4.0, 1.4.1.post1, and 1.5.0 differentials |
 | pytest-mock | Optional, `>=3.13,<4` for native execution | Scoped fixtures, patch cleanup, and assertion diagnostics compared with stock pytest |
 | pytest-randomly | Optional, `5.0.0` for native execution | Original collection and setup, call, and teardown reseeding hooks; requires the installed upstream module |
 | pytest-timeout | Optional, `>=2.4,<2.5` for native execution; `signal` method in the main thread; session timeouts require `--workers=1` | Marker, configuration, command-line, environment, `func_only`, and serial session timeouts compared with stock pytest; reference 2.4.0 |
@@ -407,7 +407,7 @@ alone does not require that setting.
 vfy targets pytest-asyncio 1.4.0's public API: strict and auto modes, async
 fixtures, loop scopes and factories, event-loop policies, port fixtures, and
 Hypothesis integration. The independent adapter admits installed versions 1.4.0,
-1.4.1, and 1.4.1.post1. vfy does not ship `pytest_asyncio` or its private APIs. The [async guide](../guides/asyncio.md) owns setup and behavior details;
+1.4.1, 1.4.1.post1, and 1.5.0. vfy does not ship `pytest_asyncio` or its private APIs. The [async guide](../guides/asyncio.md) owns setup and behavior details;
 [release validation](testing.md#release-validation) describes installed-wheel
 checks. Direct-pytest coverage integration requires pytest-xdist 3.6.1 or newer;
 upstream withdrew 3.6.0 for a

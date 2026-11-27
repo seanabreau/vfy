@@ -221,7 +221,14 @@ impl<'py> Collector<'py> {
             marker_count,
         };
         let rows = parameter_rows(&generation, &marks)?;
-        self.asyncio_roots(callable, &marks, &rows, function_mark_count, &mut roots)?;
+        self.asyncio_roots(
+            callable,
+            &definition_plan.nodeid,
+            &marks,
+            &rows,
+            function_mark_count,
+            &mut roots,
+        )?;
         let rows = expand_fixture_rows(
             &generation,
             rows,
@@ -383,7 +390,7 @@ impl<'py> Collector<'py> {
             }
         };
         let (async_loop_scope, own_mark_count) =
-            self.asyncio_test_plan(input.callable, &name, &marks, own_mark_count)?;
+            self.asyncio_test_plan(input.callable, &nodeid, &marks, own_mark_count)?;
         let eager_fixtures = if let Some(scope) = async_loop_scope {
             let mut eager_fixtures = input.eager.to_vec();
             eager_fixtures.push(asyncio::runner_name(scope));

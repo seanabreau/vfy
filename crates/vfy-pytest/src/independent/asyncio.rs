@@ -97,11 +97,22 @@ pub(super) fn fixture_scope(
         .map_err(PyValueError::new_err)
 }
 
-pub(super) fn test_scope(
+fn marker_error(py: Python<'_>, nodeid: &str, message: &str) -> PyResult<PyErr> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("pytrace", false)?;
+    let failure = py
+        .import("vfy.independent.facade")?
+        .getattr("Failed")?
+        .call((format!("{nodeid}: {message}"),), Some(&kwargs))?;
+    Ok(PyErr::from_value(failure))
+}
+
+fn test_scope(
     context: Option<&Context>,
-    py: Python<'_>,
+    nodeid: &str,
     marks: &Bound<'_, PyList>,
 ) -> PyResult<Option<AsyncioLoopScope>> {
+    let py = marks.py();
     if !enabled(context, py)? {
         return Ok(None);
     }
@@ -124,40 +135,58 @@ pub(super) fn test_scope(
     if marker.is_none() && mode(context, py)? == AsyncioMode::Strict {
         return Ok(None);
     }
-    let explicit = if let Some(marker) = marker {
-        if marker.getattr("args")?.len()? != 0 {
-            return Err(PyValueError::new_err(
-                "asyncio markers accept keyword arguments only",
-            ));
-        }
+    if let Some(marker) = marker {
         let kwargs = marker.getattr("kwargs")?.cast_into::<PyDict>()?;
+        if marker.getattr("args")?.len()? != 0 {
+            return Err(marker_error(
+                py,
+                nodeid,
+                "mark.asyncio accepts only keyword arguments 'loop_scope' and 'loop_factories'.",
+            )?);
+        }
         for (name, _) in kwargs.iter() {
             let name = name.extract::<String>()?;
             if name == "loop_factories" {
-                return Err(PyValueError::new_err(
+                return Err(marker_error(
+                    py,
+                    nodeid,
                     "the asyncio marker argument loop_factories is not supported by the \
                      independent engine; use --engine=pytest-native",
-                ));
+                )?);
             }
             if name != "loop_scope" {
-                return Err(PyValueError::new_err(format!(
-                    "unsupported asyncio marker option: {name}"
-                )));
+                return Err(marker_error(
+                    py,
+                    nodeid,
+                    "mark.asyncio accepts only keyword arguments 'loop_scope' and 'loop_factories'.",
+                )?);
             }
         }
-        kwargs
-            .get_item("loop_scope")?
-            .map(|value| optional(&value))
-            .transpose()?
-            .flatten()
-    } else {
-        None
-    };
+        if let Some(scope) = kwargs.get_item("loop_scope")?
+            && scope.is_truthy()?
+        {
+            if let Some(scope) = scope
+                .extract::<String>()
+                .ok()
+                .and_then(|scope| AsyncioLoopScope::parse(&scope).ok())
+            {
+                return Ok(Some(scope));
+            }
+            let value = scope.repr()?;
+            return Err(marker_error(
+                py,
+                nodeid,
+                &format!(
+                    "mark.asyncio got an unexpected loop scope value {value}. Valid scopes are: function, class, module, package, session."
+                ),
+            )?);
+        }
+    }
     let configured = optional(&context.config.bind(py).call_method1(
         pyo3::intern!(py, "getini"),
         ("asyncio_default_test_loop_scope",),
     )?)?;
-    vfy_core::plan_asyncio_loop_scope(explicit.as_deref(), configured.as_deref(), "function")
+    AsyncioLoopScope::parse(configured.as_deref().unwrap_or("function"))
         .map(Some)
         .map_err(PyValueError::new_err)
 }
@@ -176,7 +205,8 @@ pub(super) fn live_test_scope(
     if !marker.is_none() {
         live.append(marker)?;
     }
-    test_scope(context, py, &live)
+    let nodeid = item.getattr("nodeid")?.extract::<String>()?;
+    test_scope(context, &nodeid, &live)
 }
 
 pub(super) fn unhandled_test(py: Python<'_>) -> PyResult<()> {
@@ -277,9 +307,10 @@ pub(super) fn fixture_plan(
     Ok((execution, loop_scope))
 }
 
-pub(super) fn test_requirement(
+fn test_requirement(
     context: Option<&Context>,
     callable: &Bound<'_, PyAny>,
+    nodeid: &str,
     marks: &Bound<'_, PyList>,
 ) -> PyResult<Option<AsyncioLoopScope>> {
     if !enabled(context, callable.py())? {
@@ -289,7 +320,7 @@ pub(super) fn test_requirement(
         classify(callable)?,
         FixtureExecution::AsyncCoroutine | FixtureExecution::AsyncGenerator
     ) {
-        test_scope(context, callable.py(), marks)
+        test_scope(context, nodeid, marks)
     } else {
         Ok(None)
     }
@@ -329,18 +360,19 @@ impl super::Collector<'_> {
     pub(super) fn asyncio_test_plan(
         &self,
         callable: &Bound<'_, PyAny>,
-        name: &str,
+        nodeid: &str,
         marks: &Bound<'_, PyList>,
         own_mark_count: usize,
     ) -> PyResult<(Option<AsyncioLoopScope>, usize)> {
-        let scope = test_requirement(self.context.as_ref(), callable, marks)?;
-        let added = mark_async_generator(callable, name, scope, marks, own_mark_count)?;
+        let scope = test_requirement(self.context.as_ref(), callable, nodeid, marks)?;
+        let added = mark_async_generator(callable, nodeid, scope, marks, own_mark_count)?;
         Ok((scope, own_mark_count + added))
     }
 
     pub(super) fn asyncio_roots(
         &self,
         callable: &Bound<'_, PyAny>,
+        nodeid: &str,
         marks: &Bound<'_, PyList>,
         rows: &[ParameterRow],
         function_mark_count: usize,
@@ -360,8 +392,7 @@ impl super::Collector<'_> {
             for (offset, mark) in row.marks.iter().enumerate() {
                 planning_marks.insert(function_mark_count + offset, mark.bind(callable.py()))?;
             }
-            if let Some(scope) = test_scope(self.context.as_ref(), callable.py(), &planning_marks)?
-            {
+            if let Some(scope) = test_scope(self.context.as_ref(), nodeid, &planning_marks)? {
                 let name = runner_name(scope);
                 if !roots.contains(&name) {
                     roots.push(name);
