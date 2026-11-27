@@ -198,20 +198,30 @@ impl Traversal<'_, '_> {
     fn custom_children(&mut self, id: CollectionNodeId) -> PyResult<Vec<CollectionNodeId>> {
         let py = self.collector.py;
         let object = self.object(id)?;
-        let mut children = Vec::new();
-        for child in object.bind(py).call_method0("collect")?.try_iter()? {
-            let context = self
-                .collector
-                .context
-                .as_ref()
-                .expect("configured collection session");
-            let child = arena::custom(py, context, id, &child?)?;
-            if self.kind(child)? == CollectionNodeKind::CustomItem {
-                self.collector.add_custom_item(child)?;
-            }
-            children.push(child);
+        object
+            .bind(py)
+            .call_method0("collect")?
+            .try_iter()?
+            .map(|child| self.register_custom_node(id, &child?, None))
+            .collect()
+    }
+
+    fn register_custom_node(
+        &mut self,
+        parent: CollectionNodeId,
+        object: &Bound<'_, PyAny>,
+        source_file: Option<&Path>,
+    ) -> PyResult<CollectionNodeId> {
+        let context = self
+            .collector
+            .context
+            .as_ref()
+            .expect("configured collection session");
+        let id = arena::custom(self.collector.py, context, parent, object)?;
+        if self.kind(id)? == CollectionNodeKind::CustomItem {
+            self.collector.add_custom_item(id, source_file)?;
         }
-        Ok(children)
+        Ok(id)
     }
 
     /// The builtin module collector for the file at ``path``.
@@ -315,11 +325,13 @@ impl Traversal<'_, '_> {
             }
             nodes.push(if result.is(&marker) {
                 match self.make_module(directory, path)? {
-                    Some(module) => arena::custom(py, context, directory, module.bind(py))?,
+                    Some(module) => {
+                        self.register_custom_node(directory, module.bind(py), Some(path))?
+                    }
                     None => self.file_module(directory, path)?,
                 }
             } else {
-                arena::custom(py, context, directory, &result)?
+                self.register_custom_node(directory, &result, Some(path))?
             });
         }
         Ok(nodes)
