@@ -37,6 +37,7 @@ class MonitoringCollector:
         self.branch = branch
         self.decisions = decisions
         self.context = context
+        self.include_ignored = bool(include and (source or source_pkgs))
         self._started = False
         try:
             sysmon_arcs = coverage_uses_sysmon_branch_arcs(core)
