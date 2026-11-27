@@ -10,7 +10,8 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from dataclasses import dataclass
+import tomllib
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TextIO
 
@@ -155,6 +156,19 @@ def changed_paths(base: str | None) -> list[str]:
     return [path for path in completed.stdout.split("\0") if path]
 
 
+def workspace_version_changed(base: str) -> bool:
+    """Compare the workspace release version at both ends of the PR diff."""
+    common = subprocess.check_output(["git", "merge-base", base, "HEAD"], text=True).strip()
+    versions = []
+    for revision in (common, "HEAD"):
+        manifest = subprocess.check_output(["git", "show", f"{revision}:Cargo.toml"], text=True)
+        version = tomllib.loads(manifest)["workspace"]["package"]["version"]
+        if not isinstance(version, str):
+            raise ValueError(f"Cargo.toml workspace.package.version at {revision} must be a string")
+        versions.append(version)
+    return versions[0] != versions[1]
+
+
 def _write_outputs(plan: ChangePlan, output: TextIO) -> None:
     print(f"scope={plan.scope}", file=output)
     print(f"check_docs={str(plan.check_docs).lower()}", file=output)
@@ -171,9 +185,16 @@ def main() -> int:
 
     try:
         paths = args.path or changed_paths(args.base)
-    except (OSError, ValueError) as error:
+        plan = classify(paths)
+        if (
+            not args.path
+            and args.base
+            and "Cargo.toml" in paths
+            and workspace_version_changed(args.base)
+        ):
+            plan = replace(plan, check_release=True)
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
-    plan = classify(paths)
     if args.github_output is None:
         _write_outputs(plan, sys.stdout)
     else:

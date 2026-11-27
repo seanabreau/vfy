@@ -118,6 +118,37 @@ def test_unavailable_diff_cannot_skip_targeted_checks(base: str, tmp_path: Path)
     assert not output.exists()
 
 
+@pytest.mark.parametrize(("version", "expected"), [("0.1.0", "false"), ("0.1.1", "true")])
+def test_workspace_version_change_selects_release_verification(
+    version: str, expected: str, tmp_path: Path
+) -> None:
+    def git(*arguments: str) -> None:
+        subprocess.run(["git", *arguments], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.name", "CI test")
+    git("config", "user.email", "ci@example.invalid")
+    manifest = tmp_path / "Cargo.toml"
+    manifest.write_text('[workspace.package]\nversion = "0.1.0"\n', encoding="utf-8")
+    git("add", "Cargo.toml")
+    git("commit", "-m", "base")
+    manifest.write_text(
+        f'[workspace.package]\nversion = "{version}"\nedition = "2024"\n', encoding="utf-8"
+    )
+    git("commit", "-am", "update workspace")
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "HEAD~1"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = dict(line.split("=", 1) for line in completed.stdout.splitlines())
+    assert result["scope"] == "rust"
+    assert result["check_release"] == expected
+
+
 def test_renaming_runtime_code_into_docs_keeps_the_wheel_check(tmp_path: Path) -> None:
     def git(*arguments: str) -> None:
         subprocess.run(["git", *arguments], cwd=tmp_path, check=True, capture_output=True)
