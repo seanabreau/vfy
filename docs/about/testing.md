@@ -215,7 +215,7 @@ Separate Linux CPython 3.12 wheel jobs are configured to run pytest 9.1.0, 9.1.1
 version-boundary suite without xdist, then installs pytest-xdist 3.8.0 for the
 broader native suite's stock-pytest comparisons.
 The Linux CPython 3.12 full-suite job also runs pinned pytest 9.1.1 with the pytest-xdist 3.6.1 minimum for
-direct-pytest coverage integration. The built-in asyncio check runs without
+direct-pytest coverage and native scheduling, reporting, and coverage. The built-in asyncio check runs without
 pytest-asyncio installed.
 
 The release also checks the five-project

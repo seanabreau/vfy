@@ -171,7 +171,7 @@ lines or arcs, contexts, exclusions, totals, and artifacts. Private APIs and
 
 ## Collect workers and subprocesses
 
-With pytest-xdist 3.8.0 installed:
+With pytest-xdist 3.6.1 or newer installed:
 
 ```console
 uv run pytest -p no:pytest_cov -p vfy.pytest_plugin -n 2 --cov=src --cov-branch --cov-context=test --cov-report=term-missing

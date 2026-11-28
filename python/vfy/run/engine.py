@@ -43,7 +43,7 @@ from vfy._pytest.timeout_support import (
 )
 from vfy._pytest.xdist_support import (
     XDIST_PLUGIN_NAMES,
-    XDIST_VERSION,
+    XDIST_VERSION_RANGE,
     xdist_requested,
     xdist_supported_version,
 )
@@ -239,7 +239,10 @@ def _native_engine_ineligibility(
 ) -> str | None:
     """Return the reason a native run must be rejected before launch."""
     if _xdist_requested(configuration) and not xdist_supported_version():
-        return f"the native pytest engine requires pytest-xdist=={XDIST_VERSION}"
+        return (
+            f"--engine=pytest-native requires stable pytest-xdist{XDIST_VERSION_RANGE}. "
+            "Install a supported version or use --engine=pytest with an installed xdist release"
+        )
     if (
         PYTEST_MOCK_PLUGIN_NAMES.intersection(configuration.plugins)
         or _native_mock_plugin_args(configuration, ())

@@ -178,7 +178,7 @@ once in the controller and fork their workers when they can, including runs with
 default `--capture=fd`. Other runs start fresh workers (see
 [native worker start](configuration.md#native-worker-start)).
 
-With `--engine=pytest-native` and pytest-xdist 3.8.0 installed, pytest's
+With `--engine=pytest-native` and a [supported pytest-xdist release](../about/compatibility.md#versions), pytest's
 `--numprocesses` and `--dist` use
 upstream xdist scheduling, with native execution inside the workers. Combining
 xdist with native file-group capacity above one is rejected.
@@ -486,7 +486,7 @@ collection or execution succeeded. Native startup also names installed plug-ins
 it omits compared with pytest autoloading.
 Findings from nested conftest files come from a project-wide scan and may not
 apply to the selected test paths. Xdist options and hooks are accepted with
-pytest-xdist 3.8.0. Other versions get an installation diagnostic. `--json`
+stable pytest-xdist `>=3.6.1,<3.9`. `--json`
 output is suitable for bug reports.
 
 `--collect` runs collection with the selected engine in a child process.

@@ -137,9 +137,11 @@ messages come from pytest-mock; each native worker has its own scoped fixtures.
 
 ### Use pytest-randomly
 
-Native execution loads installed pytest-randomly 5.0.0 and preserves its test
-ordering and reseeding between setup, call, and teardown. Use
-`--randomly-seed=0` to reproduce an order. The original
+The independent engine loads the installed pytest-randomly entry point.
+`--engine=pytest-native` supports final 5.x releases. Both run the plug-in's
+test ordering and reseeding between setup, call, and teardown. Use
+`--randomly-seed=0` to reproduce an order or `--randomly-seed=last` to reuse
+the project's cached seed. The original
 `--randomly-dont-reset-seed` and `--randomly-dont-reorganize` options also apply.
 
 ### Use pytest-timeout

@@ -6,6 +6,7 @@ from pathlib import Path
 from types import FunctionType, ModuleType
 from typing import TYPE_CHECKING
 
+from vfy.native import pytest_plugin_version_supported
 from vfy.workers import (
     XDIST_OPTION_NAMES as XDIST_OPTION_NAMES,
     XDIST_PLUGIN_NAMES as XDIST_PLUGIN_NAMES,
@@ -17,7 +18,7 @@ from .plugin_support import installed_plugin_distribution
 if TYPE_CHECKING:
     from _pytest.config import Config
 
-XDIST_VERSION = "3.8.0"
+XDIST_VERSION_RANGE = ">=3.6.1,<3.9"
 XDIST_CONFTEST_HOOKS = frozenset(
     {
         "pytest_xdist_setupnodes",
@@ -41,9 +42,9 @@ XDIST_CONFTEST_HOOKS = frozenset(
 
 
 def xdist_supported_version() -> bool:
-    """Return whether the installed xdist matches the tested protocol version."""
+    """Return whether the installed xdist falls within the supported protocol range."""
     installed = installed_plugin_distribution("pytest-xdist")
-    return installed is not None and installed.version == XDIST_VERSION
+    return installed is not None and pytest_plugin_version_supported("xdist", installed.version)
 
 
 def trusted_xdist_plugin(plugin: object, plugin_name: str) -> bool:
@@ -92,7 +93,7 @@ def trusted_xdist_plugin(plugin: object, plugin_name: str) -> bool:
     installed = installed_plugin_distribution("pytest-xdist")
     return (
         installed is not None
-        and installed.version == XDIST_VERSION
+        and pytest_plugin_version_supported("xdist", installed.version)
         and Path(origin).resolve() == Path(str(installed.locate_file(relative))).resolve()
     )
 
