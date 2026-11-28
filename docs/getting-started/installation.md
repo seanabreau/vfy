@@ -52,10 +52,10 @@ uv run vfy diagnostics
 Example output:
 
 ```text
-vfy 0.0.1
-vfy 0.0.1 independent diagnostics
-Python 3.13.9 (cpython, linux)
-pytest: available
+vfy 0.0.2
+vfy 0.0.2 native diagnostics
+Python 3.12.14 (cpython, linux)
+pytest: not installed
 Independent runtime: available
 vfy configuration: valid
 ...
