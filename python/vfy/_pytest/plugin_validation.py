@@ -286,8 +286,9 @@ def _validated_randomly_phase_hook(
         return False
     if not trusted_native_randomly_plugin(plugin, plugin_name):
         raise UnsupportedExtensionError(
-            "native pytest requires the installed upstream pytest-randomly plugin "
-            "from a final 5.x release"
+            "--engine=pytest-native requires the installed upstream pytest-randomly plugin "
+            "from a final 5.x release. Use --engine=pytest for other versions "
+            "or project-local plug-ins"
         )
     if hook_name not in PYTEST_RANDOMLY_PHASE_HOOKS:
         return False
@@ -420,8 +421,8 @@ def _validated_xdist_plugin(plugin: object, plugin_name: str) -> bool:
         return False
     if not xdist_supported_version():
         raise UnsupportedExtensionError(
-            f"native pytest supports stable pytest-xdist{XDIST_VERSION_RANGE}. "
-            "Install a supported version or run this workflow with --engine=pytest"
+            f"--engine=pytest-native requires stable pytest-xdist{XDIST_VERSION_RANGE}. "
+            "Install a supported version or use --engine=pytest with an installed xdist release"
         )
     raise UnsupportedExtensionError(
         f"native pytest requires the installed upstream xdist plugin: {plugin_name!r}"

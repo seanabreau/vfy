@@ -346,12 +346,17 @@ def _diagnostics_pytest_conflicts(
     xdist_conflicts: list[str] = []
     supported_xdist = xdist_supported_version()
     if xdist_requested(all_args, [*plugin_names, *env_plugins]) and not supported_xdist:
-        action = f"install a stable release matching 'pytest-xdist{XDIST_VERSION_RANGE}'"
+        action = (
+            f"install a stable release matching 'pytest-xdist{XDIST_VERSION_RANGE}' "
+            "or use vfy test --engine=pytest with an installed xdist release"
+        )
         conflicts.append(
             {
                 "kind": "xdist",
                 "source": "resolved pytest addopts or diagnostics arguments",
-                "detail": f"native pytest requires stable pytest-xdist{XDIST_VERSION_RANGE}",
+                "detail": (
+                    f"--engine=pytest-native requires stable pytest-xdist{XDIST_VERSION_RANGE}"
+                ),
                 "action": action,
             }
         )
