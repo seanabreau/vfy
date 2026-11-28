@@ -406,6 +406,7 @@ impl<'py> Collector<'py> {
         self.install_property_provider(&plugins.raw)?;
         self.install_unraisable_provider(&plugins.raw)?;
         self.install_runtime_providers(&plugins.raw)?;
+        self.install_warning_provider(&plugins.raw)?;
         self.refresh_import_mode()?;
         if let Some(context) = &self.context {
             context
