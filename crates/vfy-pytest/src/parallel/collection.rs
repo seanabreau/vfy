@@ -14,6 +14,9 @@ use std::thread;
 pub(super) fn wait_for_worker_plan(py: Python<'_>, directory: &Path, index: usize) -> PyResult<()> {
     loop {
         py.check_signals()?;
+        // The supervisor releases surplus workers before publishing the plan.
+        // Once we see the plan, the following lookup sees our final role.
+        let plan_ready = directory.join("plan.json").is_file();
         if surplus_path(directory, index).is_file() {
             return Err(native_parallel_error(
                 py,
@@ -34,7 +37,7 @@ pub(super) fn wait_for_worker_plan(py: Python<'_>, directory: &Path, index: usiz
                 return Err(PyRuntimeError::new_err(control.detail));
             }
         }
-        if directory.join("plan.json").is_file() {
+        if plan_ready {
             return Ok(());
         }
         py.detach(|| thread::sleep(POLL_INTERVAL));

@@ -334,18 +334,33 @@ impl ParallelSupervisor<'_> {
         }
         let status_matches =
             status.code().map(i64::from) == Some(completion.returncode.rem_euclid(256));
-        let interrupted = if completion.index == index && !status_matches {
-            self.completed_interruption(index, &completion, status)?
-        } else {
-            None
-        };
-        if completion.index != index || (!status_matches && interrupted.is_none()) {
-            return Err(self.abort_error(py, format!("native parallel worker {index} published a collection completion inconsistent with its process status or lifecycle (status {status})"), Some(worker_exit_code(status))));
+        if completion.index == index {
+            if status_matches {
+                return Ok(completion);
+            }
+            // A collection peer can publish its shutdown before replaying the SIGINT
+            // we sent to drain it. The drain still validates its collection record.
+            if !self.released
+                && self
+                    .cancellation
+                    .delivered_interruption(index, status)
+                    .is_some()
+                && matches!(
+                    self.validate_completion(index, &completion)?,
+                    (
+                        independent::PublishedResult::Collection,
+                        independent::ValidatedCompletion::Result(_)
+                    )
+                )
+            {
+                return Ok(completion);
+            }
+            if let Some(completed) = self.completed_interruption(index, &completion, status)? {
+                self.completed_workers[index] = Some(completed);
+                return Ok(completion);
+            }
         }
-        if let Some(completed) = interrupted {
-            self.completed_workers[index] = Some(completed);
-        }
-        Ok(completion)
+        Err(self.abort_error(py, format!("native parallel worker {index} published a collection completion inconsistent with its process status or lifecycle (status {status})"), Some(worker_exit_code(status))))
     }
 
     fn completed_interruption(
