@@ -1,8 +1,9 @@
-"""Identity checks for the supported upstream Platformdirs fixture adapter."""
+"""Verify the origin and contents of the Platformdirs fixture module."""
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -14,19 +15,16 @@ if TYPE_CHECKING:
 
 PLATFORMDIRS_PLUGIN_MODULE = "platformdirs.pytest_plugin"
 PLATFORMDIRS_PLUGIN_NAMES = frozenset({"platformdirs", PLATFORMDIRS_PLUGIN_MODULE})
-PLATFORMDIRS_REVIEWED_VERSIONS = "4.12.0-4.12.3"
-# Platformdirs releases its fixture module unchanged across patch releases, so
-# the reviewed bytes, not the distribution version, identify the adapter.
+_PLUGIN_PATH = "platformdirs/pytest_plugin.py"
+# Use the reviewed bytes when installation metadata supplies no fixture digest,
+# as with an editable installation.
 _REVIEWED_PLUGIN_SHA256 = "909672c61917b3284cc0c4369a3a8d284049782c3fb26ecbe058bb2a42c68e2c"
 
 
-def platformdirs_plugin_reviewed() -> bool:
-    """Return whether the installed Platformdirs ships the reviewed fixture module."""
+def platformdirs_plugin_verified() -> bool:
+    """Return whether the installed Platformdirs fixture file can be verified."""
     installed = installed_plugin_distribution("platformdirs")
-    if installed is None:
-        return False
-    origin = _installed_plugin_path(installed)
-    return origin is not None and _reviewed_bytes(origin)
+    return installed is not None and _verified_plugin_path(installed) is not None
 
 
 def platformdirs_entrypoint_installed() -> bool:
@@ -45,30 +43,52 @@ def trusted_platformdirs_plugin(plugin: ModuleType, plugin_name: str) -> bool:
     if (
         plugin_name not in PLATFORMDIRS_PLUGIN_NAMES
         or plugin.__name__ != PLATFORMDIRS_PLUGIN_MODULE
+        or sys.modules.get(PLATFORMDIRS_PLUGIN_MODULE) is not plugin
     ):
         return False
     origin = getattr(plugin, "__file__", None)
+    spec_origin = getattr(getattr(plugin, "__spec__", None), "origin", None)
     installed = installed_plugin_distribution("platformdirs")
-    if not isinstance(origin, str) or installed is None:
+    if not isinstance(origin, str) or not isinstance(spec_origin, str) or installed is None:
         return False
-    expected = _installed_plugin_path(installed)
-    return expected is not None and Path(origin).resolve() == expected and _reviewed_bytes(expected)
+    expected = _verified_plugin_path(installed)
+    return (
+        expected is not None and Path(origin).resolve() == Path(spec_origin).resolve() == expected
+    )
 
 
-def _reviewed_bytes(origin: Path) -> bool:
+def _plugin_digest(origin: Path) -> bytes | None:
     import hashlib  # noqa: PLC0415 - only needed when validating a plug-in
 
     try:
         content = origin.read_bytes()
     except OSError:
-        return False
-    return hashlib.sha256(content).hexdigest() == _REVIEWED_PLUGIN_SHA256
+        return None
+    return hashlib.sha256(content).digest()
 
 
-def _installed_plugin_path(installed: Distribution) -> Path | None:
-    packaged = Path(str(installed.locate_file("platformdirs/pytest_plugin.py"))).resolve()
+def _verified_plugin_path(installed: Distribution) -> Path | None:
+    packaged = Path(str(installed.locate_file(_PLUGIN_PATH))).resolve()
+    recorded = None
     if packaged.is_file():
-        return packaged
+        origin = packaged
+        recorded = next(
+            (file.hash for file in installed.files or () if str(file) == _PLUGIN_PATH), None
+        )
+    else:
+        origin = _editable_plugin_path(installed)
+    if origin is None or (digest := _plugin_digest(origin)) is None:
+        return None
+    if recorded is None:
+        return origin if digest.hex() == _REVIEWED_PLUGIN_SHA256 else None
+
+    from base64 import urlsafe_b64encode  # noqa: PLC0415 - only wheel RECORD uses base64
+
+    encoded = urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return origin if recorded.mode == "sha256" and recorded.value == encoded else None
+
+
+def _editable_plugin_path(installed: Distribution) -> Path | None:
     # Editable metadata in a trusted installation root identifies the upstream
     # src-layout checkout; project-local dist-info cannot authorize this path.
     metadata = installed.read_text("direct_url.json")
@@ -97,4 +117,4 @@ def _installed_plugin_path(installed: Distribution) -> Path | None:
     root = Path(unquote(parsed.path))
     if not root.is_absolute():
         return None
-    return (root / "src/platformdirs/pytest_plugin.py").resolve()
+    return (root / "src" / _PLUGIN_PATH).resolve()

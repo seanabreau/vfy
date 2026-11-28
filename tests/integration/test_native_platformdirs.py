@@ -6,7 +6,9 @@ import json
 import shutil
 import sys
 import venv
-from importlib.metadata import distribution, entry_points, version
+from base64 import urlsafe_b64encode
+from hashlib import sha256
+from importlib.metadata import distribution, entry_points
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -232,56 +234,74 @@ def test_platformdirs_shadow_plugin_is_rejected_before_collection(
     options = [] if declaration else ["-p", plugin_name]
     completed = project.run_vfy("test", "--engine=pytest-native", "--no-cov", *options, "-q")
     assert completed.returncode != 0, completed.stdout + completed.stderr
-    assert "requires the installed upstream Platformdirs plugin from 4.12.0-4.12.3" in (
+    assert "requires the installed upstream Platformdirs plugin" in (
         completed.stdout + completed.stderr
     )
     assert not (project.root / "collected").exists()
 
 
 @pytest.mark.parametrize(
-    ("installed_version", "plugin_reviewed"),
-    [("4.12.0", True), ("4.12.3", True), ("4.12.0", False)],
-    ids=["reviewed", "later-release-same-plugin", "changed-plugin"],
+    ("installation", "version_override", "changed"),
+    [
+        pytest.param("editable", None, False, id="reviewed-editable"),
+        pytest.param("editable", "99.0", False, id="same-editable-with-new-version"),
+        pytest.param("editable", None, True, id="modified-editable"),
+        pytest.param("wheel", "99.0", False, id="recorded-wheel-fixture"),
+        pytest.param("wheel", None, True, id="modified-wheel-fixture"),
+        pytest.param("unrecorded", None, False, id="reviewed-unrecorded-fixture"),
+        pytest.param("unrecorded", None, True, id="modified-unrecorded-fixture"),
+    ],
 )
-def test_platformdirs_editable_install_identity_is_checked_before_collection(
-    tmp_path: Path, installed_version: str, *, plugin_reviewed: bool
+def test_platformdirs_install_identity_is_checked_before_collection(
+    tmp_path: Path, *, installation: str, version_override: str | None, changed: bool
 ) -> None:
     project = VfyProject(tmp_path)
-    source = project.root / "src/platformdirs"
-    shutil.copytree(
-        Path(platformdirs.__file__).parent, source, ignore=shutil.ignore_patterns("__pycache__")
-    )
-    if not plugin_reviewed:
-        with (source / "pytest_plugin.py").open("a") as plugin:
-            plugin.write("# changed after review\n")
     environment = project.root / "environment"
     venv.EnvBuilder(with_pip=False).create(environment)
     site = (
         environment / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
     )
+    source = (project.root / "src" if installation == "editable" else site) / "platformdirs"
+    shutil.copytree(
+        Path(platformdirs.__file__).parent, source, ignore=shutil.ignore_patterns("__pycache__")
+    )
+    installed = distribution("platformdirs")
+    installed_version = version_override or installed.version
     metadata = site / f"platformdirs-{installed_version}.dist-info"
     metadata.mkdir()
-    installed = distribution("platformdirs")
     upstream_metadata = installed.read_text("METADATA")
     upstream_entrypoints = installed.read_text("entry_points.txt")
     assert upstream_metadata is not None
     assert upstream_entrypoints is not None
     (metadata / "METADATA").write_text(
-        upstream_metadata.replace("Version: 4.12.0", f"Version: {installed_version}")
+        upstream_metadata.replace(
+            f"Version: {installed.version}\n", f"Version: {installed_version}\n"
+        )
     )
     (metadata / "entry_points.txt").write_text(upstream_entrypoints)
-    (metadata / "direct_url.json").write_text(
-        json.dumps({"url": project.root.as_uri(), "dir_info": {"editable": True}})
-    )
-    # Reuse the installed test dependencies without installing into either
-    # environment. Only the private venv's metadata authorizes editable source.
-    # An editable vfy checkout is outside site-packages, so add its import root.
+    fixture = source / "pytest_plugin.py"
+    if installation == "editable":
+        (metadata / "direct_url.json").write_text(
+            json.dumps({"url": project.root.as_uri(), "dir_info": {"editable": True}})
+        )
+    elif installation == "wheel":
+        # Record a wheel with different fixture bytes and the same fixture behavior.
+        payload = fixture.read_bytes() + b"\n# Release metadata update\n"
+        fixture.write_bytes(payload)
+        digest = urlsafe_b64encode(sha256(payload).digest()).rstrip(b"=").decode()
+        (metadata / "RECORD").write_text(
+            f"platformdirs/pytest_plugin.py,sha256={digest},{len(payload)}\n"
+        )
+    if changed:
+        with fixture.open("a") as plugin:
+            plugin.write("# changed after installation\n")
+    # The private venv owns Platformdirs metadata and reuses the installed test dependencies.
     (site / "dependencies.pth").write_text(
         f"{project.root / 'src'}\n{Path(pytest.__file__).parents[1]}\n"
         f"{Path(vfy.__file__).parents[1]}\n"
     )
     project.write(
-        "run_editable.py",
+        "run_installed.py",
         "import subprocess, sys\n"
         f"sys.exit(subprocess.call([{str(environment / 'bin/python')!r}, *sys.argv[1:]]))\n",
     )
@@ -295,7 +315,7 @@ def test_platformdirs_editable_install_identity_is_checked_before_collection(
         "    assert platformdirs_isolated == tmp_path\n",
     )
     completed = project.run_python(
-        "run_editable.py",
+        "run_installed.py",
         "-m",
         "vfy",
         "test",
@@ -306,12 +326,12 @@ def test_platformdirs_editable_install_identity_is_checked_before_collection(
         "test_paths.py",
         env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": None},
     )
-    if plugin_reviewed:
+    if not changed:
         completed.expect(0)
         assert "1 passed" in completed.stdout
     else:
         assert completed.returncode != 0, completed.stdout + completed.stderr
-        assert "requires the Platformdirs pytest plugin from 4.12.0-4.12.3" in (
+        assert "requires the Platformdirs pytest plugin from a verified installation" in (
             completed.stdout + completed.stderr
         )
         assert "-p no:platformdirs" in completed.stdout + completed.stderr
@@ -320,7 +340,6 @@ def test_platformdirs_editable_install_identity_is_checked_before_collection(
 
 @pytest.mark.skipif(find_spec("xdist") is None, reason="xdist is optional")
 def test_platformdirs_fixture_isolation_and_cleanup_match_stock_workers(tmp_path: Path) -> None:
-    assert version("platformdirs") == "4.12.0"
     records = {}
     for route in ("stock", "exec", "fork"):
         project = VfyProject(tmp_path / route)
@@ -440,7 +459,6 @@ def test_isolated(case, platformdirs_isolated, tmp_path, request):
 
 @pytest.mark.parametrize("hook_name", ["pytest_runtest_call", "pytest_addoption"])
 def test_platformdirs_plugin_still_rejects_unreviewed_hooks(tmp_path: Path, hook_name: str) -> None:
-    assert version("platformdirs") == "4.12.0"
     project = VfyProject(tmp_path)
     project.write(
         "conftest.py",
