@@ -23,12 +23,24 @@ def test_cancellation_releases_worker_descendant_writers(
 
     project = VfyProject(tmp_path)
     project.write(
+        "pidfile.py",
+        """import os
+from pathlib import Path
+
+def publish_pid(path: Path, pid: int) -> None:
+    staged = path.with_suffix(f'.{os.getpid()}.tmp')
+    staged.write_text(str(pid))
+    staged.replace(path)
+""",
+    )
+    project.write(
         "writer.py",
         """import fcntl, os, signal, sys
 from pathlib import Path
+from pidfile import publish_pid
 with open(sys.argv[1], 'w') as stream:
     fcntl.flock(stream, fcntl.LOCK_EX)
-    Path(sys.argv[2]).write_text(str(os.getpid()))
+    publish_pid(Path(sys.argv[2]), os.getpid())
     print('ready', flush=True)
     signal.pause()
 """,
@@ -37,11 +49,13 @@ with open(sys.argv[1], 'w') as stream:
         "conftest.py",
         f"""import os, signal, subprocess, sys
 from pathlib import Path
+from pidfile import publish_pid
 children = []
 def pytest_collection_finish(session):
     index = os.environ['VFY_NATIVE_PARALLEL_INDEX']
-    Path(f'worker-{{index}}.pid').write_text(str(os.getpid()))
-    Path('controller.pid').write_text(str(os.getppid()))
+    publish_pid(Path(f'worker-{{index}}.pid'), os.getpid())
+    if index == '0':
+        publish_pid(Path('controller.pid'), os.getppid())
     child = subprocess.Popen(
         [sys.executable, 'writer.py', f'writer-{{index}}.lock', f'writer-{{index}}.pid'],
         stdout=subprocess.PIPE, text=True)
