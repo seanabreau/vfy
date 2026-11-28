@@ -1,8 +1,18 @@
 use super::*;
 use notify::event::{CreateKind, DataChange, Flag, RemoveKind};
 
-fn session(root: &Path) -> WatchSession {
-    WatchSession::new(&[root.to_path_buf()], &[], None).expect("register temporary watch root")
+fn isolate_events(session: &mut WatchSession) -> mpsc::Sender<notify::Result<Event>> {
+    // The test supplies its own event ordering and keeps the channel open.
+    let (events, receiver) = mpsc::channel();
+    session.receiver = receiver;
+    events
+}
+
+fn session(root: &Path) -> (WatchSession, mpsc::Sender<notify::Result<Event>>) {
+    let mut session =
+        WatchSession::new(&[root.to_path_buf()], &[], None).expect("register temporary watch root");
+    let events = isolate_events(&mut session);
+    (session, events)
 }
 
 fn modified(path: PathBuf) -> Event {
@@ -29,7 +39,7 @@ fn generated_paths_do_not_hide_configuration_or_prefix_neighbors() {
 #[test]
 fn trailing_debounce_coalesces_paths_and_ignores_generated_events() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     let now = Instant::now();
     session.accept_at(
         Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.path().join("b.py"))),
@@ -63,7 +73,7 @@ fn trailing_debounce_coalesces_paths_and_ignores_generated_events() {
 #[test]
 fn running_changes_stay_queued_and_subset_cannot_clear_recovery() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin run");
     let now = Instant::now();
     session.accept_at(Ok(modified(root.path().join("app.py"))), now);
@@ -88,7 +98,7 @@ fn running_changes_stay_queued_and_subset_cannot_clear_recovery() {
 #[test]
 fn invalidated_runs_queue_recovery_without_pending_events() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin run");
     session.active.as_mut().expect("active run").obsolete = true;
     session
@@ -105,7 +115,7 @@ fn invalidated_runs_queue_recovery_without_pending_events() {
 #[test]
 fn overflow_requires_rescan_but_backend_failure_stops_observation() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     let now = Instant::now();
     session.accept_at(Ok(Event::new(EventKind::Other).set_flag(Flag::Rescan)), now);
     assert!(
@@ -130,7 +140,7 @@ fn overflow_requires_rescan_but_backend_failure_stops_observation() {
 fn edit_revert_invalidates_generation_even_with_identical_content() {
     let root = tempfile::tempdir().expect("temporary root");
     std::fs::write(root.path().join("app.py"), "value = 1").expect("source");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     let identity = session.input_identity().expect("read inputs");
     session.begin_run().expect("begin run");
     let now = Instant::now();
@@ -158,6 +168,7 @@ fn idle_parent_events_ignore_generated_assets_and_detect_source_edits() {
         None,
     )
     .expect("watch");
+    let _events = isolate_events(&mut session);
     session.begin_run().expect("begin baseline run");
     session
         .finish_run(RunOutcome::PassedFull)
@@ -214,7 +225,7 @@ fn idle_parent_events_ignore_generated_assets_and_detect_source_edits() {
 #[test]
 fn idle_empty_directory_creation_requires_a_full_run() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin baseline run");
     session
         .finish_run(RunOutcome::PassedFull)
@@ -245,7 +256,7 @@ fn idle_empty_directory_creation_requires_a_full_run() {
 #[test]
 fn create_remove_during_active_run_still_invalidates_generation() {
     let root = tempfile::tempdir().expect("temporary root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin run");
     let transient = root.path().join("transient.py");
     std::fs::write(&transient, "value = 1\n").expect("create transient source");
@@ -283,7 +294,7 @@ fn idle_metadata_reconciliation_recovers_a_missed_filesystem_event() {
     let root = tempfile::tempdir().expect("temporary root");
     let source = root.path().join("app.py");
     std::fs::write(&source, "value = 1\n").expect("source");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin baseline run");
     session
         .finish_run(RunOutcome::PassedFull)
@@ -319,7 +330,7 @@ fn publication_preflights_all_destinations_before_replacing_evidence() {
     std::fs::write(&evidence, "previous").expect("old evidence");
     std::fs::write(root.path().join("blocked"), "file").expect("blocked directory");
     std::fs::write(stage.path().join("data"), "new").expect("new data");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin run");
     let artifacts = [
         (stage.path().join("data"), evidence.clone()),
@@ -344,7 +355,7 @@ fn finalization_reconciles_content_and_rolls_back_replaced_files() {
     std::fs::write(&source, "old source").expect("source");
     std::fs::write(&evidence, "old evidence").expect("evidence");
     std::fs::write(stage.path().join("new"), "new").expect("staged");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin run");
     // An output overlapping an input changes the filesystem during finalization,
     // independent of whether notify has delivered that write yet.
@@ -377,9 +388,7 @@ fn current_publication_preserves_unrelated_report_files() {
         None,
     )
     .expect("watch");
-    // Exercise input hashing and publication without asynchronous backend events.
-    let (_events, receiver) = mpsc::channel();
-    session.receiver = receiver;
+    let _events = isolate_events(&mut session);
     session.begin_run().expect("begin run");
     assert!(
         session
@@ -402,10 +411,7 @@ fn current_publication_preserves_unrelated_report_files() {
 #[test]
 fn events_in_the_initial_snapshot_do_not_schedule_duplicate_runs() {
     let root = tempfile::tempdir().expect("root");
-    let mut session = session(root.path());
-    // An asynchronous backend event can invalidate the snapshot during this test.
-    let (_events, receiver) = mpsc::channel();
-    session.receiver = receiver;
+    let (mut session, _events) = session(root.path());
     let now = Instant::now();
     session.accept_at(
         Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.path().join("app.py"))),
@@ -423,7 +429,7 @@ fn events_in_the_initial_snapshot_do_not_schedule_duplicate_runs() {
 #[test]
 fn active_runs_cannot_overlap_or_complete_twice() {
     let root = tempfile::tempdir().expect("root");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     let request = session.begin_run().expect("begin");
     assert!(session.begin_run().is_err());
     assert_eq!(
@@ -447,7 +453,7 @@ fn a_reconciled_edit_cannot_be_erased_by_reverting_content() {
     let root = tempfile::tempdir().expect("root");
     let source = root.path().join("app.py");
     std::fs::write(&source, "original").expect("source");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     let request = session.begin_run().expect("begin");
     std::fs::write(&source, "edited").expect("edit");
     assert!(!session.is_current().expect("reconcile"));
@@ -473,10 +479,7 @@ fn finalization_consumes_the_execution_before_another_save() {
     let evidence = root.path().join(".coverage");
     std::fs::write(&source, "original").expect("source");
     std::fs::write(stage.path().join("data"), "accepted evidence").expect("data");
-    let mut session = session(root.path());
-    // Verify the commit point with filesystem contents as the only input changes.
-    let (_events, receiver) = mpsc::channel();
-    session.receiver = receiver;
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin");
     assert_eq!(
         session
@@ -503,7 +506,7 @@ fn destination_aliases_are_rejected_before_publication() {
     let evidence = root.path().join(".coverage");
     std::fs::write(&evidence, "accepted").expect("evidence");
     std::fs::write(stage.path().join("data"), "new").expect("staged");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.begin_run().expect("begin");
     let artifacts = [
         (stage.path().join("data"), evidence.clone()),
@@ -531,6 +534,7 @@ fn python_inputs_outside_the_git_worktree_require_full_execution() {
         None,
     )
     .expect("watch");
+    let _events = isolate_events(&mut session);
     let now = Instant::now();
     session.accept_at(Ok(modified(external.path().join("runtime.py"))), now);
     let batch = session
@@ -546,7 +550,7 @@ fn configuration_reload_does_not_permanently_ignore_former_outputs() {
     let root = tempfile::tempdir().expect("root");
     let former_output = root.path().join("runtime.json");
     std::fs::write(&former_output, "runtime data").expect("input");
-    let mut session = session(root.path());
+    let (mut session, _events) = session(root.path());
     session.set_resolved_ignored(std::slice::from_ref(&former_output));
     let request = session.begin_run().expect("begin");
     session.set_ignored(&[]);
@@ -617,7 +621,8 @@ fn overlapping_root_replacements_keep_edit_revert_events() {
         } else {
             (root_path.as_path(), package.as_path())
         };
-        let mut session = session(old);
+        let mut session = WatchSession::new(&[old.to_path_buf()], &[], None)
+            .expect("register temporary watch root");
         session
             .set_roots(&[new.to_path_buf()])
             .expect("replace root");
@@ -681,7 +686,7 @@ fn generated_names_above_a_watch_root_do_not_hide_inputs() {
     std::fs::create_dir_all(root.join("__pycache__")).expect("project layout");
     std::fs::write(root.join("module.py"), "value = 1\n").expect("source");
     std::fs::write(root.join("__pycache__").join("module.pyc"), "one").expect("bytecode");
-    let mut session = session(&root);
+    let (mut session, _events) = session(&root);
     let before = session.input_identity().expect("initial identity");
     std::fs::write(root.join("module.py"), "value = 2\n").expect("edit source");
     assert_ne!(session.input_identity().expect("edited identity"), before);
