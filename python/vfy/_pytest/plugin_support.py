@@ -230,7 +230,7 @@ def trusted_native_seed_xdist_plugin(plugin: object) -> bool:
     return (
         isinstance(origin, str)
         and installed is not None
-        and installed.version == "1.2.0"
+        and pytest_plugin_version_supported("random-order", installed.version)
         and Path(origin).resolve()
         == Path(str(installed.locate_file("random_order/xdist.py"))).resolve()
     )

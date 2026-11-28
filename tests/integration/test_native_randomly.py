@@ -108,7 +108,7 @@ def test_shadow_randomly_module_cannot_claim_reviewed_phase_hooks(tmp_path: Path
         "test", "--engine=pytest-native", "--no-cov", "-p", "pytest_randomly", env=_ENVIRONMENT
     )
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "requires the installed upstream pytest-randomly 5.0.0" in result.stdout + result.stderr
+    assert "requires the installed upstream pytest-randomly plugin" in result.stdout + result.stderr
     assert not (project.root / "called").exists()
     assert not (project.root / "collected").exists()
 

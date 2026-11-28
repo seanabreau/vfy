@@ -13,6 +13,7 @@ pub(crate) use comparison::pytest_version_less_than;
 enum SupportedPlugin {
     Benchmark,
     Mock,
+    RandomOrder,
     Randomly,
     Timeout,
 }
@@ -25,7 +26,8 @@ impl SupportedPlugin {
         let (minimum, maximum) = match self {
             Self::Benchmark => (Version::new([5, 3]), Version::new([5, 4])),
             Self::Mock => (Version::new([3, 13]), Version::new([4])),
-            Self::Randomly => return *version == Version::new([5, 0, 0]),
+            Self::RandomOrder => (Version::new([1, 1]), Version::new([2])),
+            Self::Randomly => (Version::new([5]), Version::new([6])),
             Self::Timeout => (Version::new([2, 4]), Version::new([2, 5])),
         };
         VersionSpecifier::greater_than_equal_version(minimum).contains(version)
@@ -86,12 +88,13 @@ pub(crate) fn pytest_plugin_version_supported(
     let plugin = match plugin {
         "benchmark" => SupportedPlugin::Benchmark,
         "mock" => SupportedPlugin::Mock,
+        "random-order" => SupportedPlugin::RandomOrder,
         "randomly" => SupportedPlugin::Randomly,
         "timeout" => SupportedPlugin::Timeout,
         _ => {
-            return Err(PyValueError::new_err(
-                "expected plugin 'benchmark', 'mock', 'randomly', or 'timeout'",
-            ));
+            return Err(PyValueError::new_err(format!(
+                "unknown pytest plugin {plugin:?}"
+            )));
         }
     };
     let normalized = bounded_version(version);

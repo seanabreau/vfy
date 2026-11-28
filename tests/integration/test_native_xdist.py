@@ -328,6 +328,56 @@ def test_native_xdist_uses_upstream_schedulers_fixtures_and_worker_hooks(
     assert junit["native"] == junit["upstream"]
 
 
+def test_random_order_passes_the_collection_seed_to_xdist_workers(tmp_path: Path) -> None:
+    observations = []
+    for route in ("upstream", "native"):
+        project = VfyProject(tmp_path / route)
+        project.write(
+            "conftest.py",
+            dedent("""\
+                import json
+                from pathlib import Path
+
+                def pytest_collection_finish(session):
+                    config = session.config
+                    worker = getattr(config, 'workerinput', None)
+                    if worker is not None:
+                        Path(worker['workerid'] + '.json').write_text(json.dumps({
+                            'seed': config.getoption('random_order_seed'),
+                            'worker_seed': worker.get('random_order_seed'),
+                            'items': [item.nodeid for item in session.items],
+                        }))
+                """),
+        )
+        project.write("test_order.py", "".join(f"def test_{index}(): pass\n" for index in range(8)))
+        arguments = (
+            "-p",
+            "xdist",
+            "-p",
+            "random_order.plugin",
+            "--numprocesses=2",
+            "--random-order-bucket=global",
+            "--random-order-seed=7",
+            "-q",
+        )
+        if route == "upstream":
+            completed = project.run_python("-m", "pytest", *arguments)
+        else:
+            completed = project.run_vfy("test", "--engine=pytest-native", "--no-cov", *arguments)
+        completed.expect(0)
+
+        workers = [
+            json.loads((project.root / f"{name}.json").read_text()) for name in ("gw0", "gw1")
+        ]
+        assert workers[0] == workers[1]
+        collection = workers[0]
+        assert collection["seed"] == collection["worker_seed"] == "7"
+        assert sorted(collection["items"]) == [f"test_order.py::test_{index}" for index in range(8)]
+        assert collection["items"] != sorted(collection["items"])
+        observations.append(collection)
+    assert observations[0] == observations[1]
+
+
 @pytest.mark.parametrize(
     "source", ["argument", "configuration", "environment", "plugins", "explicit-plugin"]
 )

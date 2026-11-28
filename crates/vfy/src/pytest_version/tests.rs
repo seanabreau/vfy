@@ -24,11 +24,18 @@ fn plugin_ranges_use_pep440_release_ordering() {
         (SupportedPlugin::Timeout, "2.4rc1", false),
         (SupportedPlugin::Timeout, "2.5.dev1", false),
         (SupportedPlugin::Timeout, "2.5", false),
+        (SupportedPlugin::RandomOrder, "1.0.4", false),
+        (SupportedPlugin::RandomOrder, "1.1.0", true),
+        (SupportedPlugin::RandomOrder, "1.2.0", true),
+        (SupportedPlugin::RandomOrder, "1.3.0rc1", false),
+        (SupportedPlugin::RandomOrder, "2.0.0", false),
         (SupportedPlugin::Randomly, "5.0.0", true),
-        (SupportedPlugin::Randomly, "5.0.0+local", false),
-        (SupportedPlugin::Randomly, "5.0.0.post1", false),
-        (SupportedPlugin::Randomly, "5.0.1", false),
-        (SupportedPlugin::Randomly, "4.0", false),
+        (SupportedPlugin::Randomly, "5.0.0+local", true),
+        (SupportedPlugin::Randomly, "5.0.0.post1", true),
+        (SupportedPlugin::Randomly, "5.1.0", true),
+        (SupportedPlugin::Randomly, "5.2.0rc1", false),
+        (SupportedPlugin::Randomly, "4.1.0", false),
+        (SupportedPlugin::Randomly, "6.0.0", false),
     ] {
         let parsed = candidate.parse::<Version>().expect("valid version fixture");
         assert_eq!(plugin.contains(&parsed), expected, "{candidate}");

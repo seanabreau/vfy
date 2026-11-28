@@ -286,7 +286,8 @@ def _validated_randomly_phase_hook(
         return False
     if not trusted_native_randomly_plugin(plugin, plugin_name):
         raise UnsupportedExtensionError(
-            "native pytest requires the installed upstream pytest-randomly 5.0.0 plugin"
+            "native pytest requires the installed upstream pytest-randomly plugin "
+            "from a final 5.x release"
         )
     if hook_name not in PYTEST_RANDOMLY_PHASE_HOOKS:
         return False

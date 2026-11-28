@@ -27,7 +27,8 @@ older, and PyPy, are unsupported.
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
 | pytest-asyncio | `1.4.0`, `1.4.1`, `1.4.1.post1` (independent adapter admission) | 1.4.0 and 1.4.1.post1 differentials |
 | pytest-mock | Optional, `>=3.13,<4` for native execution | Scoped fixtures, patch cleanup, and assertion diagnostics compared with stock pytest |
-| pytest-randomly | Optional, `5.0.0` for native execution | Original collection and setup, call, and teardown reseeding hooks; requires the installed upstream module |
+| pytest-randomly | Optional. `pytest-native` admits final `>=5,<6` releases from the installed upstream distribution. The independent engine loads its ordinary pytest entry point. | Test order, setup, call and teardown reseeding, and worker seeds compared with stock pytest on 5.0.0 and 5.1.0 |
+| pytest-random-order | Optional, final `>=1.1,<2` with `--engine=pytest-native` and pytest-xdist | Seed handoff and collection order compared with stock pytest |
 | pytest-timeout | Optional, `>=2.4,<2.5` for native execution; `signal` method in the main thread; session timeouts require `--workers=1` | Marker, configuration, command-line, environment, `func_only`, and serial session timeouts compared with stock pytest; reference 2.4.0 |
 | pytest-benchmark | Optional, `>=5.3,<5.4` for native execution; measures with `--workers=1` | Fixture, `pedantic`, marker options, disable, skip and only modes, JSON output, and skipped-test cleanup compared with stock pytest; reference 5.3.1 |
 | pytest-codspeed | Optional, 5.0.3 or 5.0.4 for independent execution; inactive fixtures and markers | The independent adapter provides unmeasured fixtures and markers, including the package’s `BenchmarkFixture` import. Measurement, instrumentation, and other plugin internals require `--engine=pytest`; `--codspeed` and `CODSPEED_ENV` are rejected. |
