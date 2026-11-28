@@ -18,6 +18,10 @@ Make this decision for each operation. A single package can supply several.
 | A feature with both native and upstream parts | Run the native part directly. Check each required upstream interface where the operation uses it. | Calling an unmeasured CodSpeed fixture can run the callable once. Its pedantic setup uses an installed helper. Actual measurement needs the upstream runner. |
 | An unsupported active operation | Stop at the earliest point where the engine knows it cannot honor the request. Name the option, hook, or fixture and give a command that can run it. | With `--codspeed`, direct the user to `vfy test --engine=pytest --codspeed` before any tests execute. |
 
+For example, the native CodSpeed fixture accepts one invocation per test.
+Stock pytest-codspeed 3.2.0 permits repeated calls. A project relying on that
+older behavior can keep both calls and use `vfy test --engine=pytest`.
+
 ### Resolve a provider once
 
 1. Honor the selected engine, explicit plug-in requests, and `-p no:NAME`.
