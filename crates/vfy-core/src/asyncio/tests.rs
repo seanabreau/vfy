@@ -14,6 +14,14 @@ fn selects_explicit_then_configured_then_fixture_scope() {
         plan_asyncio_loop_scope(None, None, "function"),
         Ok(AsyncioLoopScope::Function)
     );
+    assert_eq!(
+        plan_asyncio_loop_scope(None, Some("fixture-scope"), "module"),
+        Ok(AsyncioLoopScope::Module)
+    );
+    assert_eq!(
+        plan_asyncio_loop_scope(Some("session"), Some("fixture-scope"), "module"),
+        Ok(AsyncioLoopScope::Session)
+    );
 }
 
 #[test]
@@ -21,4 +29,7 @@ fn rejects_invalid_modes_and_scopes() {
     assert!(validate_asyncio_config("invalid", None, "function").is_err());
     assert!(validate_asyncio_config("strict", Some("task"), "function").is_err());
     assert!(validate_asyncio_config("auto", None, "task").is_err());
+    assert!(validate_asyncio_config("auto", Some("fixture-scope"), "function").is_ok());
+    assert!(validate_asyncio_config("auto", None, "fixture-scope").is_err());
+    assert!(plan_asyncio_loop_scope(Some("fixture-scope"), None, "function").is_err());
 }

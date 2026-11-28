@@ -9,7 +9,7 @@ plug-ins before switching CI to `vfy test`.
 
 On Linux and macOS, vfy’s default native engine runs pytest-style tests
 without installed pytest. Check the [compatibility matrix](../about/compatibility.md)
-for the test features and plug-ins your suite uses. The optional
+for the test features and plug-ins your suite uses. [How vfy runs pytest plug-ins](../about/pytest-plugin-compatibility.md) explains when a fixture comes from vfy or from your installed package. The optional
 [`--engine=pytest-native` route](../about/pytest.md#select-an-execution-engine)
 uses installed pytest for collection and vfy for execution.
 

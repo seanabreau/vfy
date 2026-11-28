@@ -10,7 +10,6 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from collections.abc import Mapping
 from html import unescape
-from importlib.metadata import version
 from pathlib import Path
 from textwrap import dedent
 from typing import Literal
@@ -1243,7 +1242,6 @@ def test_native_xdist_async_fixture_lifetime_matches_pytest_asyncio(tmp_path: Pa
     pytest.importorskip(
         "pytest_asyncio", reason="the upstream async oracle requires pytest-asyncio"
     )
-    assert version("pytest-asyncio") == "1.4.0"
     lifetimes: dict[str, list[list[list[object]]]] = {}
     junit: dict[str, list[JunitCase]] = {}
     for route in ("upstream", "native"):

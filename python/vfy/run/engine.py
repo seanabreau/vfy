@@ -25,9 +25,8 @@ from vfy._pytest.mock_support import (
 )
 from vfy._pytest.platformdirs_support import (
     PLATFORMDIRS_PLUGIN_NAMES,
-    PLATFORMDIRS_REVIEWED_VERSIONS,
     platformdirs_entrypoint_installed,
-    platformdirs_plugin_reviewed,
+    platformdirs_plugin_verified,
 )
 from vfy._pytest.plugin_support import (
     PYTESTER_PLUGIN_NAMES,
@@ -260,10 +259,11 @@ def _native_engine_ineligibility(
     if (
         PLATFORMDIRS_PLUGIN_NAMES.intersection(configuration.plugins)
         or _native_platformdirs_plugin_args(configuration, ())
-    ) and not platformdirs_plugin_reviewed():
+    ) and not platformdirs_plugin_verified():
         return (
             "the native pytest engine requires the Platformdirs pytest plugin from "
-            f"{PLATFORMDIRS_REVIEWED_VERSIONS}; pass -p no:platformdirs to run without it"
+            "a verified installation. Reinstall Platformdirs from a wheel or pass "
+            "-p no:platformdirs to run without it"
         )
     if environment_conflict := _pytest_cov_environment_conflict():
         return environment_conflict

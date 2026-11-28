@@ -38,7 +38,6 @@ from .native_state import (
 from .platformdirs_support import (
     PLATFORMDIRS_PLUGIN_MODULE,
     PLATFORMDIRS_PLUGIN_NAMES,
-    PLATFORMDIRS_REVIEWED_VERSIONS,
     trusted_platformdirs_plugin,
 )
 from .plugin_support import (
@@ -262,8 +261,7 @@ def _validated_platformdirs_plugin(
         return False
     if not (isinstance(plugin, ModuleType) and trusted_platformdirs_plugin(plugin, plugin_name)):
         raise UnsupportedExtensionError(
-            "native pytest requires the installed upstream Platformdirs plugin from "
-            f"{PLATFORMDIRS_REVIEWED_VERSIONS}: {plugin_name!r}"
+            f"native pytest requires the installed upstream Platformdirs plugin: {plugin_name!r}"
         )
     for attribute_name in dir(plugin):
         options = manager.parse_hookimpl_opts(plugin, attribute_name)

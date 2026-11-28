@@ -25,19 +25,31 @@ older, and PyPy, are unsupported.
 | pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
 | pytest-html | `4.2.0` (integration) | 4.2.0 |
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
-| pytest-asyncio | `1.4.0`, `1.4.1`, `1.4.1.post1` (independent adapter admission) | 1.4.0 and 1.4.1.post1 differentials |
+| pytest-asyncio | Built into the native engine; installation is optional | 1.4.0, 1.4.1.post1, and 1.5.0 differentials |
 | pytest-mock | Optional, `>=3.13,<4` for native execution | Scoped fixtures, patch cleanup, and assertion diagnostics compared with stock pytest |
 | pytest-randomly | Optional. `pytest-native` admits final `>=5,<6` releases from the installed upstream distribution. The independent engine loads its ordinary pytest entry point. | Test order, setup, call and teardown reseeding, and worker seeds compared with stock pytest on 5.0.0 and 5.1.0 |
 | pytest-random-order | Optional, final `>=1.1,<2` with `--engine=pytest-native` and pytest-xdist | Seed handoff and collection order compared with stock pytest |
 | pytest-timeout | Optional, `>=2.4,<2.5` for native execution; `signal` method in the main thread; session timeouts require `--workers=1` | Marker, configuration, command-line, environment, `func_only`, and serial session timeouts compared with stock pytest; reference 2.4.0 |
 | pytest-benchmark | Optional, `>=5.3,<5.4` for native execution; measures with `--workers=1` | Fixture, `pedantic`, marker options, disable, skip and only modes, JSON output, and skipped-test cleanup compared with stock pytest; reference 5.3.1 |
-| pytest-codspeed | Optional, 5.0.3 or 5.0.4 for independent execution; inactive fixtures and markers | The independent adapter provides unmeasured fixtures and markers, including the package’s `BenchmarkFixture` import. Measurement, instrumentation, and other plugin internals require `--engine=pytest`; `--codspeed` and `CODSPEED_ENV` are rejected. |
+| pytest-codspeed | Unmeasured calls run natively; tuning and pedantic calls use installed helpers | The independent adapter provides unmeasured fixtures and markers, including the package’s `BenchmarkFixture` import. Use `--engine=pytest` for measurement, instrumentation, and other plug-in internals, including `--codspeed` and `CODSPEED_ENV`. |
 | Independent replacements for absent timeout and benchmark plug-ins | POSIX main-thread signal timeouts, configuration and runtime marker overrides, `func_only`, and `0` to disable; unmeasured benchmark calls, group metadata, skip and only selection | Signal timeout phases and configuration precedence are compared with pytest-timeout 2.4.0, including independent workers. Timers restore the previous signal handler and reject a foreign `ITIMER_REAL` deadline before mutation. A runtime call-only marker replaces an owned protocol timer; the protocol deadline does not resume after the call. Thread timers, session deadlines, and debugger override options require pytest-timeout. Benchmark calls and `pedantic` follow pytest-benchmark's disabled mode; explicit `--benchmark-disable` also permits warmup, sort, and grouping settings. Measurement, profiles, comparisons, and artifacts require the installed plug-in. CodSpeed measurement requires `--engine=pytest`. |
-| Platformdirs | Optional, reviewed fixture module (4.12.0–4.12.3) | Fixture isolation and cleanup compared with stock pytest, including native and xdist workers |
+| Platformdirs | Optional with `pytest-native`. The fixture file must match the installed distribution's SHA-256 record. Without a record, including editable installs, vfy requires a reviewed fixture file. | Fixture isolation and cleanup compared with stock pytest, including native and xdist workers |
+
+See [how vfy runs pytest plug-ins](pytest-plugin-compatibility.md) for provider selection,
+feature checks, and the evidence used to extend support.
+
+The pytest-cov, pytest-html, and pytest-metadata versions above identify the
+upstream reference for vfy’s reporting features. Projects can use the built-in
+reporters without installing those distributions.
 
 Package metadata declares dependency ranges; the lockfile pins reference versions.
 A configured CI lane is not evidence that the current revision passed. Recorded
 results apply only to their stated wheel and revision.
+
+With plug-in autoload enabled, the independent engine supplies built-in
+asyncio, mock, unmeasured benchmark, signal timeout, and serial xdist support
+when the corresponding plug-in is unregistered. Explicit plug-in blocks
+also apply to these fallbacks.
 
 ## Native pytest limits
 
@@ -405,11 +417,11 @@ The native engine emits the unset loop-scope warning for explicit asyncio
 plugin requests or an enabled pytest-asyncio installation. Built-in support
 alone does not require that setting.
 
-vfy targets pytest-asyncio 1.4.0's public API: strict and auto modes, async
+vfy implements pytest-asyncio’s strict and auto modes, async
 fixtures, loop scopes and factories, event-loop policies, port fixtures, and
-Hypothesis integration. The independent adapter admits installed versions 1.4.0,
-1.4.1, and 1.4.1.post1. vfy does not ship `pytest_asyncio` or its private APIs. The [async guide](../guides/asyncio.md) owns setup and behavior details;
-[release validation](testing.md#release-validation) describes installed-wheel
+Hypothesis integration. The [async guide](../guides/asyncio.md) describes
+fixture lifetime and configuration on each engine.
+[Release validation](testing.md#release-validation) describes installed-wheel
 checks. Direct-pytest coverage integration requires pytest-xdist 3.6.1 or newer;
 upstream withdrew 3.6.0 for a
 [pytest-cov regression](https://pytest-xdist.readthedocs.io/en/latest/changelog.html#pytest-xdist-3-6-0-2024-04-19).

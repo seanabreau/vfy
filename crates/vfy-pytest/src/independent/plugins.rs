@@ -46,10 +46,10 @@ const ALIASES: &[(&str, &str)] = &[
     ),
 ];
 
-/// A vfy plug-in that stands in for pytest plug-in distributions when none is installed.
+/// A vfy plug-in that fills in for a provider that did not load.
 struct Replacement {
-    distributions: &'static [&'static str],
     entry_points: &'static [&'static str],
+    explicit_names: &'static [&'static str],
     module: &'static str,
     alias_module: &'static str,
     aliases: &'static [&'static str],
@@ -57,29 +57,36 @@ struct Replacement {
 
 const REPLACEMENTS: &[Replacement] = &[
     Replacement {
-        distributions: &["pytest-mock"],
+        entry_points: &[ASYNCIO_PLUGIN],
+        explicit_names: &[],
+        module: "vfy.independent.asyncio_support",
+        alias_module: "vfy.independent.asyncio_support",
+        aliases: &[],
+    },
+    Replacement {
         entry_points: &["pytest_mock"],
+        explicit_names: &["pytest_mock.plugin"],
         module: "vfy.independent.mock_fixtures",
         alias_module: "vfy.independent.mock_support",
         aliases: &["pytest_mock"],
     },
     Replacement {
-        distributions: &["pytest-benchmark", "pytest-codspeed"],
         entry_points: &["benchmark", "codspeed"],
+        explicit_names: &["pytest_benchmark.plugin"],
         module: "vfy.independent.benchmark",
         alias_module: "vfy.independent.benchmark",
         aliases: &[],
     },
     Replacement {
-        distributions: &["pytest-timeout"],
         entry_points: &["timeout"],
+        explicit_names: &["pytest_timeout"],
         module: "vfy.independent.timeout",
         alias_module: "vfy.independent.timeout",
         aliases: &[],
     },
     Replacement {
-        distributions: &["pytest-xdist"],
         entry_points: &["xdist"],
+        explicit_names: &["xdist.plugin"],
         module: "vfy.independent.xdist_support",
         alias_module: "vfy.independent.xdist_support",
         aliases: &[],
@@ -151,91 +158,46 @@ fn installed_distribution<'py>(py: Python<'py>, name: &str) -> PyResult<Option<B
     }
 }
 
-fn asyncio_distribution(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
-    let distribution = installed_distribution(py, "pytest-asyncio")?;
-    if let Some(distribution) = &distribution {
-        let version = distribution.getattr("version")?.extract::<String>()?;
-        if !matches!(version.as_str(), "1.4.0" | "1.4.1" | "1.4.1.post1") {
-            return Err(crate::UnsupportedFeatureError::new_err(format!(
-                "the independent asyncio adapter requires pytest-asyncio 1.4.0, 1.4.1, or 1.4.1.post1; found {version}"
-            )));
+/// The adapter substitutes for a single upstream pytest11 entry point.
+fn adapter_distribution(py: Python<'_>, requested: &str) -> PyResult<Option<Py<PyAny>>> {
+    let name = canonical_name(requested);
+    let (package, module) = match name {
+        ASYNCIO_PLUGIN if requested != "vfy.independent.asyncio_support" => {
+            ("pytest-asyncio", "pytest_asyncio.plugin")
         }
-    }
-    // The adapter replaces `pytest_asyncio.plugin`; admitting any other or a second
-    // asyncio entry point would run the adapter in place of different plug-in code.
+        "codspeed" => ("pytest-codspeed", "pytest_codspeed.plugin"),
+        _ => return Ok(None),
+    };
+    let distribution = installed_distribution(py, package)?;
     let entries = entrypoints(py)?
         .into_iter()
-        .filter(|(name, _, _)| name == ASYNCIO_PLUGIN)
+        .filter(|(key, _, _)| key == name)
         .collect::<Vec<_>>();
-    let upstream_plugin = match entries.as_slice() {
-        [] => distribution.is_none(),
-        [(_, entry, _)] => {
-            distribution.is_some()
-                && entry.bind(py).getattr("value")?.extract::<String>()? == "pytest_asyncio.plugin"
+    let upstream_plugin = match (entries.as_slice(), &distribution) {
+        ([], _) => return Ok(None),
+        ([(_, entry, owner)], Some(installed)) => {
+            let owner = owner.bind(py);
+            let entry = entry.bind(py);
+            let owner_name = owner
+                .getattr("metadata")?
+                .get_item("Name")?
+                .extract::<String>()?;
+            owner_name.to_ascii_lowercase().replace(['_', '.'], "-") == package
+                && owner
+                    .getattr("version")?
+                    .eq(installed.getattr("version")?)?
+                && owner
+                    .call_method1("locate_file", ("",))?
+                    .eq(installed.call_method1("locate_file", ("",))?)?
+                && entry.getattr("value")?.extract::<String>()? == module
+                && installed.getattr("entry_points")?.contains(entry)?
         }
         _ => false,
     };
     if !upstream_plugin {
-        return Err(crate::UnsupportedFeatureError::new_err(
-            "unsupported pytest-asyncio pytest11 entry point; expected one asyncio = pytest_asyncio.plugin from a supported pytest-asyncio release",
-        ));
-    }
-    Ok(distribution.map(Bound::unbind))
-}
-
-fn codspeed_distribution(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
-    let distribution = installed_distribution(py, "pytest-codspeed")?;
-    let entries = entrypoints(py)?
-        .into_iter()
-        .filter(|(name, _, _)| name == "codspeed")
-        .collect::<Vec<_>>();
-    let upstream_plugin = match entries.as_slice() {
-        [] => distribution.is_none(),
-        [(_, entry, owner)] => {
-            if let Some(distribution) = &distribution {
-                let owner = owner.bind(py);
-                let owner_name = owner
-                    .getattr("metadata")?
-                    .get_item("Name")?
-                    .extract::<String>()?;
-                let owner_root = owner.call_method1("locate_file", ("",))?;
-                let installed_root = distribution.call_method1("locate_file", ("",))?;
-                let mut installed_entry = false;
-                for candidate in distribution.getattr("entry_points")?.try_iter()? {
-                    let candidate = candidate?;
-                    if candidate.getattr("group")?.extract::<String>()? == "pytest11"
-                        && candidate.getattr("name")?.extract::<String>()? == "codspeed"
-                        && candidate.getattr("value")?.extract::<String>()?
-                            == "pytest_codspeed.plugin"
-                    {
-                        installed_entry = true;
-                    }
-                }
-                installed_entry
-                    && owner_name.to_ascii_lowercase().replace(['_', '.'], "-") == "pytest-codspeed"
-                    && owner.getattr("version")?.extract::<String>()?
-                        == distribution.getattr("version")?.extract::<String>()?
-                    && owner_root.eq(&installed_root)?
-                    && entry.bind(py).getattr("value")?.extract::<String>()?
-                        == "pytest_codspeed.plugin"
-            } else {
-                false
-            }
-        }
-        _ => false,
-    };
-    if !upstream_plugin {
-        return Err(crate::UnsupportedFeatureError::new_err(
-            "unsupported codspeed pytest11 entry point; expected codspeed = pytest_codspeed.plugin",
-        ));
-    }
-    if let Some(distribution) = &distribution {
-        let version = distribution.getattr("version")?.extract::<String>()?;
-        if !matches!(version.as_str(), "5.0.3" | "5.0.4") {
-            return Err(crate::UnsupportedFeatureError::new_err(format!(
-                "the independent CodSpeed adapter requires pytest-codspeed 5.0.3 or 5.0.4; found {version}"
-            )));
-        }
+        return Err(crate::UnsupportedFeatureError::new_err(format!(
+            "unsupported {package} pytest11 entry point; expected one {name} = {module} from {package}. Use --engine=pytest to load the installed plugin."
+        )));
     }
     Ok(distribution.map(Bound::unbind))
 }
@@ -400,7 +362,6 @@ impl<'py> Collector<'py> {
     }
 
     fn load_plugin_from(&mut self, requested: &str, source: PluginSource) -> PyResult<()> {
-        let owned_asyncio = requested == "vfy.independent.asyncio_support";
         let owned_reporting = requested == REPORTING_ADAPTER;
         let name = canonical_name(requested);
         let manager = self
@@ -416,16 +377,7 @@ impl<'py> Collector<'py> {
         }
         // Owned support has no upstream dependency. Explicit aliases still need
         // admission when the owned plugin was already cached.
-        let admitted_codspeed = if name == "codspeed" {
-            codspeed_distribution(self.py)?
-        } else {
-            None
-        };
-        let admitted_asyncio = if name == ASYNCIO_PLUGIN && !owned_asyncio {
-            asyncio_distribution(self.py)?
-        } else {
-            None
-        };
+        let distribution = adapter_distribution(self.py, requested)?;
         if let Some(plugin) = self.plugins.get(name) {
             if owned_reporting
                 && plugin
@@ -443,11 +395,7 @@ impl<'py> Collector<'py> {
             {
                 context.register(self.py, plugin.clone_ref(self.py), name)?;
             }
-            // The canonical names are distinct, so at most one adapter is admitted.
-            if let (Some(distribution), Some(manager)) = (
-                admitted_asyncio.as_ref().or(admitted_codspeed.as_ref()),
-                &manager,
-            ) {
+            if let (Some(distribution), Some(manager)) = (&distribution, &manager) {
                 record_admitted_distribution(
                     manager,
                     plugin.bind(self.py),
@@ -490,8 +438,7 @@ impl<'py> Collector<'py> {
             "threadexception" | "faulthandler" => return self.activate_runtime_provider(name),
             _ => {}
         }
-        let (plugin, distribution) =
-            self.import_plugin(requested, admitted_asyncio, admitted_codspeed, source)?;
+        let (plugin, distribution) = self.import_plugin(requested, distribution, source)?;
         self.plugins
             .insert(name.to_owned(), plugin.clone().unbind());
         // Only explicit owned activation gives this alias the HTML identity;
@@ -513,8 +460,7 @@ impl<'py> Collector<'py> {
     fn import_plugin(
         &self,
         requested: &str,
-        admitted_asyncio: Option<Py<PyAny>>,
-        admitted_codspeed: Option<Py<PyAny>>,
+        adapter_distribution: Option<Py<PyAny>>,
         source: PluginSource,
     ) -> PyResult<(Bound<'py, PyAny>, Option<Py<PyAny>>)> {
         let name = canonical_name(requested);
@@ -560,8 +506,8 @@ impl<'py> Collector<'py> {
             } else {
                 imports.call_method0("upstream_plugin")?
             };
-            (plugin, admitted_asyncio)
-        } else if name == "codspeed" && admitted_codspeed.is_some() {
+            (plugin, adapter_distribution)
+        } else if name == "codspeed" && adapter_distribution.is_some() {
             let plugin = self.py.import(CODSPEED_ADAPTER)?.into_any();
             let context = self.context.as_ref().ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err(
@@ -569,7 +515,7 @@ impl<'py> Collector<'py> {
                 )
             })?;
             plugin.call_method1("install_import_alias", (context.config.bind(self.py),))?;
-            (plugin, admitted_codspeed)
+            (plugin, adapter_distribution)
         } else if name == HYPOTHESIS_PLUGIN {
             let context = self.context.as_ref().ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err(
@@ -654,14 +600,11 @@ impl<'py> Collector<'py> {
         Ok(())
     }
 
-    /// Provide vfy's own plug-ins in place of absent pytest plug-in distributions.
+    /// Fill in missing providers after explicit and automatic plug-in loading.
     pub(super) fn load_replacements(&mut self) -> PyResult<()> {
         // pytest would not autoload the replaced distributions either.
         if autoload_disabled() {
             return Ok(());
-        }
-        if installed_distribution(self.py, "pytest-asyncio")?.is_none() {
-            self.load_plugin("vfy.independent.asyncio_support")?;
         }
         let Some(config) = self
             .context
@@ -672,22 +615,38 @@ impl<'py> Collector<'py> {
         };
         let config = config.bind(self.py);
         let manager = config.getattr("pluginmanager")?;
-        for replacement in REPLACEMENTS {
-            let mut absent = true;
-            for distribution in replacement.distributions {
-                absent &= installed_distribution(self.py, distribution)?.is_none();
-            }
-            let mut blocked = false;
+        'replacements: for replacement in REPLACEMENTS {
             for name in replacement.entry_points {
-                blocked |= manager.call_method1("is_blocked", (*name,))?.is_truthy()?;
+                if manager.call_method1("is_blocked", (*name,))?.is_truthy()? {
+                    continue 'replacements;
+                }
             }
-            if !absent || blocked {
+            // Explicit module loads do not need an entry point to own their hooks.
+            for name in replacement
+                .entry_points
+                .iter()
+                .chain(replacement.explicit_names)
+            {
+                if manager.call_method1("has_plugin", (*name,))?.is_truthy()? {
+                    continue 'replacements;
+                }
+            }
+            if manager
+                .call_method1("is_blocked", (replacement.module,))?
+                .is_truthy()?
+            {
                 continue;
             }
             self.load_plugin(replacement.module)?;
             for alias in replacement.aliases {
                 let modules = self.py.import("sys")?.getattr("modules")?;
-                if !modules.contains(*alias)? {
+                if !modules.contains(*alias)?
+                    && self
+                        .py
+                        .import("importlib.util")?
+                        .call_method1("find_spec", (*alias,))?
+                        .is_none()
+                {
                     self.py
                         .import("vfy.independent.plugin_aliases")?
                         .call_method1(

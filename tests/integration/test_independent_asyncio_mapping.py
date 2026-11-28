@@ -372,7 +372,7 @@ async def test_body(resource, request):
 
 
 @requires_native_pytest
-@pytest.mark.parametrize("invalid", ["version", "entrypoint", "duplicate"])
+@pytest.mark.parametrize("invalid", ["entrypoint", "duplicate"])
 def test_asyncio_metadata_rejection_precedes_test_import_and_leaves_later_runs_working(
     tmp_path: Path, invalid: str
 ) -> None:
@@ -392,10 +392,10 @@ from types import SimpleNamespace
 invalid = os.environ.get('FAKE_ASYNCIO_METADATA')
 if invalid:
     value = 'wrong.plugin' if invalid == 'entrypoint' else 'pytest_asyncio.plugin'
-    version = '0.0' if invalid == 'version' else '1.4.0'
     entry = metadata.EntryPoint(name='asyncio', value=value, group='pytest11')
     distribution = SimpleNamespace(
-        metadata={'Name': 'pytest-asyncio'}, version=version, entry_points=[entry]
+        metadata={'Name': 'pytest-asyncio'}, version='1.4.0', entry_points=[entry],
+        locate_file=lambda path: path,
     )
     metadata.distribution = lambda name: distribution
     metadata.distributions = lambda: [distribution] * (2 if invalid == 'duplicate' else 1)
