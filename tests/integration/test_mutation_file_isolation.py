@@ -175,42 +175,44 @@ _COUNTER_SOURCE = """\
 from __future__ import annotations
 
 import fcntl
-import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
-def _update(event: str) -> int:
-    lock_path = Path(".worker-budget.lock")
-    state_path = Path(".worker-budget.json")
-    with lock_path.open("a+", encoding="utf-8") as lock:
+def active_workers() -> int:
+    active = 0
+    for path in Path.cwd().glob(".worker-budget-*.lock"):
+        with path.open("ab") as worker:
+            try:
+                fcntl.flock(worker.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                active += 1
+    return active
+
+
+@contextmanager
+def track_worker() -> Iterator[int]:
+    worker_path = Path(f".worker-budget-{os.getpid()}.lock")
+    peak_path = Path(".worker-budget.peak")
+    with worker_path.open("ab") as worker, Path(".worker-budget.lock").open("ab") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        active = active_workers() + 1
+        # The kernel releases this lock when a later file group is cancelled.
+        # A counter that relies on Python finally blocks overcounts killed workers.
+        fcntl.flock(worker.fileno(), fcntl.LOCK_EX)
+        peak = int(peak_path.read_text()) if peak_path.exists() else 0
+        if active > peak:
+            staged = peak_path.with_name(f"{peak_path.name}.{os.getpid()}")
+            staged.write_text(str(active))
+            os.replace(staged, peak_path)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
         try:
-            if state_path.exists():
-                state = json.loads(state_path.read_text(encoding="utf-8"))
-            else:
-                state = {"active": 0, "peak": 0, "events": []}
-            active = int(state["active"]) + (1 if event == "enter" else -1)
-            if active < 0:
-                raise AssertionError("worker counter became negative")
-            state["active"] = active
-            state["peak"] = max(int(state["peak"]), active)
-            state["events"].append({"event": event, "pid": os.getpid(), "active": active})
-            # Replace the file so the unlocked final read never sees a partial write.
-            staged = state_path.with_name(f"{state_path.name}.{os.getpid()}")
-            staged.write_text(json.dumps(state), encoding="utf-8")
-            os.replace(staged, state_path)
-            return active
+            yield active
         finally:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-
-
-def enter() -> int:
-    return _update("enter")
-
-
-def leave() -> None:
-    _update("exit")
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(worker.fileno(), fcntl.LOCK_UN)
 """
 
 
@@ -218,25 +220,10 @@ def _budgeted_test_body(body: str) -> str:
     return (
         "import budget_counter\n\n"
         "def test_value():\n"
-        "    active = budget_counter.enter()\n"
-        "    try:\n"
+        "    with budget_counter.track_worker() as active:\n"
         "        assert active <= 2, f'{active} executing test workers exceed -j 2'\n"
         + "".join(f"        {line}\n" for line in body.splitlines())
-        + "    finally:\n"
-        "        budget_counter.leave()\n"
     )
-
-
-def _read_budget(project: VfyProject) -> dict[str, object]:
-    state_path = project.root / ".worker-budget.json"
-    state = cast(dict[str, object], json.loads(state_path.read_text()))
-    assert state["active"] == 0
-    assert state["peak"] == 2
-    events = cast(list[dict[str, object]], state["events"])
-    assert sum(event["event"] == "enter" for event in events) == sum(
-        event["event"] == "exit" for event in events
-    )
-    return state
 
 
 def test_native_file_isolation_shares_worker_budget_for_collected_and_portable_mutations(
@@ -290,7 +277,7 @@ def test_native_file_isolation_shares_worker_budget_for_collected_and_portable_m
 
     signatures: list[list[str]] = []
     for engine in ("auto", "portable"):
-        for name in (".worker-budget.json", "portable-writer-started", "controller-saw-writer"):
+        for name in (".worker-budget.peak", "portable-writer-started", "controller-saw-writer"):
             (tmp_path / name).unlink(missing_ok=True)
         completed, report = _mutate_native_file_isolated(
             project, engine=engine, timeout_policy="fixed"
@@ -340,8 +327,11 @@ def test_native_file_isolation_shares_worker_budget_for_collected_and_portable_m
             if sys.platform.startswith("linux"):
                 # Linux prestarts the fresh supervisor before controller collection.
                 assert (tmp_path / "controller-saw-writer").exists(), diagnostic
-        state = _read_budget(project)
-        assert state["peak"] == 2
+        active = project.run_python(
+            "-c", "import budget_counter; print(budget_counter.active_workers())"
+        )
+        assert int(active.expect(0).stdout) == 0, diagnostic
+        assert int((tmp_path / ".worker-budget.peak").read_text()) == 2, diagnostic
 
     assert signatures[0] == signatures[1]
 
