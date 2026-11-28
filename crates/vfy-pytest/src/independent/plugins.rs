@@ -159,12 +159,15 @@ fn installed_distribution<'py>(py: Python<'py>, name: &str) -> PyResult<Option<B
 }
 
 /// The adapter substitutes for a single upstream pytest11 entry point.
-fn adapter_distribution(
-    py: Python<'_>,
-    name: &str,
-    package: &str,
-    module: &str,
-) -> PyResult<Option<Py<PyAny>>> {
+fn adapter_distribution(py: Python<'_>, requested: &str) -> PyResult<Option<Py<PyAny>>> {
+    let name = canonical_name(requested);
+    let (package, module) = match name {
+        ASYNCIO_PLUGIN if requested != "vfy.independent.asyncio_support" => {
+            ("pytest-asyncio", "pytest_asyncio.plugin")
+        }
+        "codspeed" => ("pytest-codspeed", "pytest_codspeed.plugin"),
+        _ => return Ok(None),
+    };
     let distribution = installed_distribution(py, package)?;
     let entries = entrypoints(py)?
         .into_iter()
@@ -359,7 +362,6 @@ impl<'py> Collector<'py> {
     }
 
     fn load_plugin_from(&mut self, requested: &str, source: PluginSource) -> PyResult<()> {
-        let owned_asyncio = requested == "vfy.independent.asyncio_support";
         let owned_reporting = requested == REPORTING_ADAPTER;
         let name = canonical_name(requested);
         let manager = self
@@ -375,26 +377,7 @@ impl<'py> Collector<'py> {
         }
         // Owned support has no upstream dependency. Explicit aliases still need
         // admission when the owned plugin was already cached.
-        let admitted_codspeed = if name == "codspeed" {
-            adapter_distribution(
-                self.py,
-                "codspeed",
-                "pytest-codspeed",
-                "pytest_codspeed.plugin",
-            )?
-        } else {
-            None
-        };
-        let admitted_asyncio = if name == ASYNCIO_PLUGIN && !owned_asyncio {
-            adapter_distribution(
-                self.py,
-                ASYNCIO_PLUGIN,
-                "pytest-asyncio",
-                "pytest_asyncio.plugin",
-            )?
-        } else {
-            None
-        };
+        let distribution = adapter_distribution(self.py, requested)?;
         if let Some(plugin) = self.plugins.get(name) {
             if owned_reporting
                 && plugin
@@ -412,11 +395,7 @@ impl<'py> Collector<'py> {
             {
                 context.register(self.py, plugin.clone_ref(self.py), name)?;
             }
-            // The canonical names are distinct, so at most one adapter is admitted.
-            if let (Some(distribution), Some(manager)) = (
-                admitted_asyncio.as_ref().or(admitted_codspeed.as_ref()),
-                &manager,
-            ) {
+            if let (Some(distribution), Some(manager)) = (&distribution, &manager) {
                 record_admitted_distribution(
                     manager,
                     plugin.bind(self.py),
@@ -458,8 +437,7 @@ impl<'py> Collector<'py> {
             "threadexception" | "faulthandler" => return self.activate_runtime_provider(name),
             _ => {}
         }
-        let (plugin, distribution) =
-            self.import_plugin(requested, admitted_asyncio, admitted_codspeed, source)?;
+        let (plugin, distribution) = self.import_plugin(requested, distribution, source)?;
         self.plugins
             .insert(name.to_owned(), plugin.clone().unbind());
         // Only explicit owned activation gives this alias the HTML identity;
@@ -481,8 +459,7 @@ impl<'py> Collector<'py> {
     fn import_plugin(
         &self,
         requested: &str,
-        admitted_asyncio: Option<Py<PyAny>>,
-        admitted_codspeed: Option<Py<PyAny>>,
+        adapter_distribution: Option<Py<PyAny>>,
         source: PluginSource,
     ) -> PyResult<(Bound<'py, PyAny>, Option<Py<PyAny>>)> {
         let name = canonical_name(requested);
@@ -528,8 +505,8 @@ impl<'py> Collector<'py> {
             } else {
                 imports.call_method0("upstream_plugin")?
             };
-            (plugin, admitted_asyncio)
-        } else if name == "codspeed" && admitted_codspeed.is_some() {
+            (plugin, adapter_distribution)
+        } else if name == "codspeed" && adapter_distribution.is_some() {
             let plugin = self.py.import(CODSPEED_ADAPTER)?.into_any();
             let context = self.context.as_ref().ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err(
@@ -537,7 +514,7 @@ impl<'py> Collector<'py> {
                 )
             })?;
             plugin.call_method1("install_import_alias", (context.config.bind(self.py),))?;
-            (plugin, admitted_codspeed)
+            (plugin, adapter_distribution)
         } else if name == HYPOTHESIS_PLUGIN {
             let context = self.context.as_ref().ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err(
