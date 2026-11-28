@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   differential:
-    name: Coverage.py ecosystem differential
+    name: Coverage and plugin compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -36,6 +36,29 @@ jobs:
         run: uv run maturin develop --release --skip-install
       - name: Compare Rust data and report totals
         run: uv run --no-sync python scripts/ecosystem_differential.py
+
+      - name: Compare native plugin adapters against reference and latest releases
+        env:
+          CORPUS_WORK: ${{ runner.temp }}/vfy-asyncio
+          CORPUS_VFY_ARGS: -p no:randomly -p no:cacheprovider
+        run: |
+          # CodSpeed owns the benchmark fixture in this comparison.
+          uv pip uninstall --python .venv/bin/python pytest-benchmark
+          for bound in reference latest; do
+            if [[ "$bound" == reference ]]; then
+              plugins=('pytest-asyncio==1.4.0' 'pytest-codspeed==4.3.0')
+            else
+              plugins=(pytest-asyncio pytest-codspeed)
+            fi
+            uv pip install --python .venv/bin/python --upgrade-package pytest-asyncio \
+              --upgrade-package pytest-codspeed "${plugins[@]}"
+            .venv/bin/python -m pytest -q tests/integration/test_independent_asyncio_versions.py \
+              tests/integration/test_independent_codspeed.py
+            uv pip freeze --python .venv/bin/python | grep '^pytest-asyncio==' > "$RUNNER_TEMP/asyncio-constraint.txt"
+            UV_CONSTRAINT="$RUNNER_TEMP/asyncio-constraint.txt" .venv/bin/python \
+              validation/pytest_runner/real_packages/corpus.py run --vfy-source python \
+              --out "$CORPUS_WORK/results/$bound" structlog
+          done
 
   real-projects:
     name: Recorded project parity
