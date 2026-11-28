@@ -1,4 +1,4 @@
-//! Signal ownership and bounded cleanup for an authenticated execution drain.
+//! Signal ownership and bounded cleanup for an authenticated worker drain.
 
 use super::{POLL_INTERVAL, ParallelChild, ParallelSupervisor, is_missing_process_group};
 use pyo3::exceptions::PyBaseException;
@@ -379,7 +379,7 @@ pub(super) fn signal_group(
 }
 
 impl ParallelSupervisor<'_> {
-    pub(super) fn interrupt_execution_peers(&mut self) -> io::Result<()> {
+    pub(super) fn interrupt_peers(&mut self) -> io::Result<()> {
         self.cancellation.start(Instant::now());
         for index in 0..self.children.len() {
             if self.children[index].is_some() && self.process_groups[index].is_some() {
