@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.support import VfyProject
+from tests.support.isolated_package import isolated_vfy_path
 from tests.support.platforms import requires_native_pytest
 
 
@@ -149,6 +150,126 @@ def test_owned_replacement_cannot_be_replaced_by_entry_point(
     )
     result = project.run_vfy("test", "--engine=native", "--no-cov", "-q", "-p", owned_name)
     result.expect(0)
+
+
+@requires_native_pytest
+def test_owned_replacements_fill_missing_providers_with_installed_metadata(
+    tmp_path: Path,
+) -> None:
+    project = VfyProject(tmp_path)
+    environment = project.root / ".independent-python"
+    project.run_python("-m", "venv", "--without-pip", str(environment)).expect(0)
+    python = str(environment / "bin" / "python")
+    location = project.run(python, "-c", "import sysconfig; print(sysconfig.get_path('purelib'))")
+    location.expect(0)
+    site_packages = Path(location.stdout.strip()).relative_to(project.root)
+    for name in ("mock", "benchmark", "codspeed", "timeout", "xdist", "asyncio"):
+        metadata = site_packages / f"pytest_{name}-99.1.dist-info" / "METADATA"
+        project.write(
+            metadata.as_posix(), f"Metadata-Version: 2.1\nName: pytest-{name}\nVersion: 99.1\n"
+        )
+    project.write(
+        "test_owned.py",
+        """def test_owned(mocker, benchmark, worker_id, event_loop_policy, request):
+    from pytest_mock import MockerFixture
+
+    assert isinstance(mocker, MockerFixture)
+    assert benchmark(lambda: 'called') == 'called'
+    assert worker_id == 'master'
+    assert event_loop_policy is not None
+    assert request.config.getoption('timeout') == 1.0
+""",
+    )
+    project.write(
+        "test_unavailable.py",
+        """import pytest
+from importlib.util import find_spec
+
+def test_unavailable(request):
+    for name in ('mocker', 'benchmark', 'worker_id', 'event_loop_policy'):
+        with pytest.raises(pytest.FixtureLookupError):
+            request.getfixturevalue(name)
+    assert request.config.getoption('timeout', None) is None
+    assert find_spec('pytest_mock') is None
+""",
+    )
+    arguments = ("-m", "vfy", "test", "--engine=native", "--no-cov", "-q")
+    env = {"PYTHONPATH": isolated_vfy_path(), "PYTEST_DISABLE_PLUGIN_AUTOLOAD": None}
+    project.run(
+        python, *arguments, "--timeout=1", "--benchmark-disable", "test_owned.py", env=env
+    ).expect(0)
+    project.run(
+        python,
+        "-m",
+        "vfy.independent.entry",
+        "-q",
+        "--timeout=1",
+        "--benchmark-disable",
+        "test_owned.py",
+        env=env,
+    ).expect(0)
+
+    blocked = ("vfy.independent.mock_fixtures", "benchmark", "timeout", "xdist", "asyncio")
+    exclusions = [part for name in blocked for part in ("-p", f"no:{name}")]
+    project.run(python, *arguments, *exclusions, "test_unavailable.py", env=env).expect(0)
+    project.run(
+        python,
+        "-m",
+        "vfy.independent.entry",
+        "-q",
+        "test_unavailable.py",
+        env={**env, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+    ).expect(0)
+
+    project.write((site_packages / "pytest_mock.py").as_posix(), "provider = 'installed module'\n")
+    project.write(
+        "test_mock_import.py",
+        """import pytest_mock
+
+def test_mock_import(mocker):
+    assert pytest_mock.provider == 'installed module'
+    assert mocker.stub().call_count == 0
+""",
+    )
+    project.run(python, *arguments, "test_mock_import.py", env=env).expect(0)
+
+
+@requires_native_pytest
+def test_owned_replacements_defer_to_loaded_installed_providers(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    names = {"pytest_mock", "benchmark", "timeout", "xdist"}
+    entries = entry_points(group="pytest11")
+    providers = {entry.name: entry.module for entry in entries if entry.name in names}
+    assert providers.keys() == names
+    project.write(
+        "test_providers.py",
+        f"""def test_providers(mocker, benchmark, worker_id, request):
+    manager = request.config.pluginmanager
+    for name, module in {providers!r}.items():
+        assert manager.getplugin(name).__name__ == module
+    assert manager.has_plugin('asyncio')
+    assert mocker.stub().call_count == 0
+    assert benchmark(lambda: 'called') == 'called'
+    assert worker_id == 'master'
+    assert request.config.getoption('timeout') == 1.0
+""",
+    )
+    exclusions = [
+        part
+        for entry in entries
+        if entry.name not in {*providers, "asyncio", "pytest_cov"}
+        for part in ("-p", f"no:{entry.name}")
+    ]
+    project.run_vfy(
+        "test",
+        "--engine=native",
+        "--no-cov",
+        "-q",
+        *exclusions,
+        "--timeout=1",
+        "--benchmark-disable",
+        env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": None},
+    ).expect(0)
 
 
 @requires_native_pytest

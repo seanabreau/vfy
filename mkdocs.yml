@@ -69,6 +69,7 @@ nav:
     - Configuration: reference/configuration.md
     - Python API: reference/python-api.md
     - Compatibility: about/compatibility.md
+    - Pytest plug-in compatibility: about/pytest-plugin-compatibility.md
     - Data files: reference/data-files.md
   - Help:
     - FAQ: help/faq.md

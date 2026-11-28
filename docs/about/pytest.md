@@ -25,10 +25,13 @@ vfy reads pytest configuration and accepts supported pytest selectors and run
 options, including paths, node IDs, `-k`, and `-m`. See the
 [command reference](../reference/cli.md) for options and limits.
 
-`vfy test` loads its supported plug-in adapters and installed plug-ins whose
-hooks it runs unchanged, rather than every installed pytest plug-in. An installed
-plug-in may be omitted, and explicitly loading an unsupported runtime plug-in is
-rejected. vfy does not automatically switch back to pytest execution. The
+`vfy test` uses native providers for features such as asyncio. With plug-in
+autoload enabled, the native engine discovers installed pytest11 entry points,
+substitutes its known adapters, and loads other providers through their entry
+points. An unsupported active hook or option can stop the run.
+`--engine=pytest-native` loads a selected set of installed plug-ins and reports
+omissions. Choose `--engine=pytest` explicitly to run the suite with pytest.
+The
 [compatibility matrix](compatibility.md) and
 [plug-in setup](../guides/native-adoption.md#load-supported-plug-ins) describe
 what works.

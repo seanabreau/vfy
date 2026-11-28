@@ -98,7 +98,7 @@ pub fn validate_asyncio_config(
     {
         AsyncioLoopScope::parse(scope).map_err(|_| {
             format!(
-                "'{scope}' is not a valid asyncio_default_fixture_loop_scope. Valid scopes are: {}, {FIXTURE_CACHING_SCOPE}.",
+                "'{scope}' is not a valid asyncio_default_fixture_loop_scope. Valid scopes are: {}.",
                 VALID_SCOPES.join(", ")
             )
         })?;

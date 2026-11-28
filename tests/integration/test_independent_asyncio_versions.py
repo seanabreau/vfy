@@ -7,12 +7,14 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from tests.support import VfyProject
+from tests.support.isolated_package import isolated_vfy_path
 from tests.support.platforms import requires_native_pytest
 
 pytestmark = requires_native_pytest
-_LEGACY_REFERENCE = version("pytest-asyncio").startswith("1.4.")
+_LEGACY_REFERENCE = Version(version("pytest-asyncio")) < Version("1.5")
 
 
 def test_installed_asyncio_version_and_fixture_lifecycle_match_reference(tmp_path: Path) -> None:
@@ -70,33 +72,18 @@ async def test_async(resource, request):
 
 
 @pytest.mark.parametrize("workers", [1, 2])
-@pytest.mark.parametrize(
-    "fixture_scope",
-    [
-        None,
-        pytest.param(
-            "fixture-scope",
-            marks=pytest.mark.skipif(_LEGACY_REFERENCE, reason="requires pytest-asyncio 1.5.0"),
-        ),
-    ],
-    ids=["unset", "explicit"],
-)
+@pytest.mark.parametrize("fixture_scope", [None, "fixture-scope"], ids=["unset", "explicit"])
 def test_default_fixture_scope_matches_caching_scope(
     tmp_path: Path, workers: int, fixture_scope: str | None
 ) -> None:
-    configuration = "[pytest]\n"
-    stock_warnings: tuple[str, ...] = ()
-    if fixture_scope is not None:
-        configuration += f"asyncio_default_fixture_loop_scope = {fixture_scope}\n"
-    else:
-        stock_warnings = (
-            "-W",
-            'ignore:The configuration option "asyncio_default_fixture_loop_scope" is unset.'
-            ":pytest.PytestDeprecationWarning",
-        )
     for route in ("stock", "independent"):
         project = VfyProject(tmp_path / route)
-        project.write("pytest.ini", configuration)
+        # Before 1.5, stock selects the fixture's caching scope by leaving the option unset.
+        scope = None if route == "stock" and _LEGACY_REFERENCE else fixture_scope
+        project.write(
+            "pytest.ini",
+            "[pytest]\n" + (f"asyncio_default_fixture_loop_scope = {scope}\n" if scope else ""),
+        )
         for name in ("test_first", "test_second"):
             project.write(
                 f"{name}.py",
@@ -134,7 +121,14 @@ async def test_loop(module_loop, explicit_loop, case):
             )
         options = ("-q", "-p", "asyncio", "-W", "error")
         result = (
-            project.run_python("-m", "pytest", *options, *stock_warnings)
+            project.run_python(
+                "-m",
+                "pytest",
+                *options,
+                "-W",
+                'ignore:The configuration option "asyncio_default_fixture_loop_scope" is unset.'
+                ":pytest.PytestDeprecationWarning",
+            )
             if route == "stock"
             else project.run_vfy(
                 "test",
@@ -160,36 +154,78 @@ async def test_loop(module_loop, explicit_loop, case):
             assert set(topology["worker_pids"]) == worker_pids
 
 
-@pytest.mark.skipif(not _LEGACY_REFERENCE, reason="requires pytest-asyncio 1.4.x")
-def test_legacy_adapter_rejects_explicit_fixture_scope_before_collection(tmp_path: Path) -> None:
-    project = VfyProject(tmp_path)
-    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = fixture-scope\n")
-    project.write("test_body.py", "from pathlib import Path\nPath('collected').touch()\n")
-    options = ("-q", "-p", "asyncio")
-    stock = project.run_python("-m", "pytest", *options)
-    independent = project.run_vfy("test", "--engine=native", "--no-cov", *options)
-    for result in (stock, independent):
-        result.expect(4)
-        assert "'fixture-scope' is not a valid asyncio_default_fixture_loop_scope." in result.stderr
-        assert "Valid scopes are: function, class, module, package, session." in result.stderr
-    assert not (project.root / "collected").exists()
-
-
-@pytest.mark.parametrize("unsupported", ["1.4.0.post1", "1.4.1.post2", "1.4.2", "1.5.1"])
-def test_unverified_asyncio_versions_are_rejected_before_collection(
-    tmp_path: Path, unsupported: str
+@pytest.mark.parametrize(
+    ("installed", "entrypoint"),
+    [("0.23.8", True), ("1.4+vendor.1", True), ("2.0a1", True), ("99.0", False)],
+)
+def test_native_asyncio_runs_independently_of_installed_version(
+    tmp_path: Path, installed: str, entrypoint: bool
 ) -> None:
     project = VfyProject(tmp_path)
-    metadata = f"pytest_asyncio-{unsupported}.dist-info"
+    environment = tmp_path / ".venv"
+    project.run_python("-m", "venv", "--without-pip", str(environment)).expect(0)
+    metadata = f"pytest_asyncio-{installed}.dist-info"
     project.write(
         f"{metadata}/METADATA",
-        f"Metadata-Version: 2.1\nName: pytest-asyncio\nVersion: {unsupported}\n",
+        f"Metadata-Version: 2.1\nName: pytest-asyncio\nVersion: {installed}\n",
     )
-    project.write(f"{metadata}/entry_points.txt", "[pytest11]\nasyncio = pytest_asyncio.plugin\n")
+    if entrypoint:
+        project.write(
+            f"{metadata}/entry_points.txt", "[pytest11]\nasyncio = pytest_asyncio.plugin\n"
+        )
+    project.write(
+        "test_body.py",
+        """from pathlib import Path
+import pytest
+import pytest_asyncio
+
+Path("collected").touch()
+
+@pytest.mark.asyncio
+async def test_version():
+    Path("ran").write_text(pytest_asyncio.__version__)
+""",
+    )
+    result = project.run(
+        str(environment / "bin" / "python"),
+        "-m",
+        "vfy",
+        "test",
+        "--engine=native",
+        "--no-cov",
+        "-p",
+        "asyncio",
+        "-q",
+        env={"PYTHONPATH": isolated_vfy_path()},
+    )
+    result.expect(0)
+    assert (tmp_path / "ran").read_text() == installed
+
+
+def test_asyncio_entry_point_must_belong_to_pytest_asyncio(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path)
+    environment = tmp_path / ".venv"
+    project.run_python("-m", "venv", "--without-pip", str(environment)).expect(0)
+    for name in ("pytest_asyncio", "other"):
+        project.write(
+            f"{name}-1.5.dist-info/METADATA",
+            f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.5\n",
+        )
+    project.write(
+        "other-1.5.dist-info/entry_points.txt", "[pytest11]\nasyncio = pytest_asyncio.plugin\n"
+    )
     project.write("test_body.py", "from pathlib import Path\nPath('collected').touch()\n")
-    result = project.run_vfy("test", "--engine=native", "--no-cov", "-q", "-p", "asyncio")
-    assert result.returncode != 0, result.stdout + result.stderr
-    assert f"1.4.0, 1.4.1, 1.4.1.post1, or 1.5.0; found {unsupported}" in (
-        result.stdout + result.stderr
+    result = project.run(
+        str(environment / "bin" / "python"),
+        "-m",
+        "vfy",
+        "test",
+        "--engine=native",
+        "--no-cov",
+        "-p",
+        "asyncio",
+        env={"PYTHONPATH": isolated_vfy_path()},
     )
-    assert not (project.root / "collected").exists()
+    result.expect(4)
+    assert "expected one asyncio = pytest_asyncio.plugin from pytest-asyncio" in result.stderr
+    assert not (tmp_path / "collected").exists()

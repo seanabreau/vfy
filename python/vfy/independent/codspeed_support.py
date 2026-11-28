@@ -1,4 +1,4 @@
-"""Inactive pytest-codspeed 5.0.3 and 5.0.4 fixture and pytest hooks."""
+"""Adapt pytest-codspeed fixtures and hooks for unmeasured tests."""
 
 from __future__ import annotations
 
@@ -21,13 +21,29 @@ if TYPE_CHECKING:
     from .protocol import Config, Parser
 
 
+_TUNING_OPTIONS = (
+    ("--codspeed-warmup-time", float),
+    ("--codspeed-max-time", float),
+    ("--codspeed-max-rounds", int),
+)
+
+
 def pytest_addoption(parser: Parser) -> None:
     group = parser.getgroup("CodSpeed benchmarking")
     group.addoption("--codspeed", action="store_true", default=False)
     group.addoption("--codspeed-mode", action="store", choices=["simulation", "memory", "walltime"])
-    group.addoption("--codspeed-warmup-time", action="store", type=float)
-    group.addoption("--codspeed-max-time", action="store", type=float)
-    group.addoption("--codspeed-max-rounds", action="store", type=int)
+    for option, converter in _TUNING_OPTIONS:
+        group.addoption(option, action="store", type=converter)
+
+
+def _upstream_config() -> ModuleType | None:
+    name = "pytest_codspeed.config"
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as error:
+        if error.name != name:
+            raise
+        return None
 
 
 def pytest_configure(config: Config) -> None:
@@ -35,10 +51,18 @@ def pytest_configure(config: Config) -> None:
         raise native._pytest.IndependentUsageError(
             "CodSpeed measurement is not supported by the independent engine; use --engine=pytest"
         )
-    # Preserve the installed plugin's configuration conversion even when
-    # measurement is disabled; the options remain observable through pytest.
-    codspeed_config = importlib.import_module("pytest_codspeed.config")
-    codspeed_config.CodSpeedConfig.from_pytest_config(config)
+    tuned_option = next(
+        (option for option, _ in _TUNING_OPTIONS if config.getoption(option) is not None), None
+    )
+    if tuned_option is not None:
+        config_type = getattr(_upstream_config(), "CodSpeedConfig", None)
+        convert = getattr(config_type, "from_pytest_config", None)
+        if not callable(convert):
+            raise native._pytest.UnsupportedFeatureError(
+                f"{tuned_option} requires the installed pytest-codspeed to expose "
+                "CodSpeedConfig.from_pytest_config. Use --engine=pytest."
+            )
+        convert(config)
     config.addinivalue_line(
         "markers", "codspeed_benchmark: mark an entire test for codspeed benchmarking"
     )
@@ -93,9 +117,14 @@ class BenchmarkFixture:
         # The admitted package's public options object owns the upstream
         # validation and setup protocol. The scoped plugin alias lets the real
         # package initialize without importing pytest's private FixtureManager.
-        codspeed_config = importlib.import_module("pytest_codspeed.config")
-        constructor = cast("Callable[..., _PedanticOptions]", codspeed_config.PedanticOptions)
-        options = constructor(
+        constructor = getattr(_upstream_config(), "PedanticOptions", None)
+        if not callable(constructor):
+            raise native._pytest.UnsupportedFeatureError(
+                "CodSpeed BenchmarkFixture.pedantic requires the installed pytest-codspeed "
+                "to expose PedanticOptions. Use --engine=pytest."
+            )
+        create_options = cast("Callable[..., _PedanticOptions]", constructor)
+        options = create_options(
             target=target,
             args=args,
             kwargs=kwargs,
@@ -105,6 +134,13 @@ class BenchmarkFixture:
             warmup_rounds=warmup_rounds,
             iterations=iterations,
         )
+        if not callable(getattr(options, "setup_and_get_args_kwargs", None)) or not hasattr(
+            options, "teardown"
+        ):
+            raise native._pytest.UnsupportedFeatureError(
+                "CodSpeed BenchmarkFixture.pedantic requires PedanticOptions to expose "
+                "setup_and_get_args_kwargs and teardown. Use --engine=pytest."
+            )
         args, kwargs = options.setup_and_get_args_kwargs()
         result = target(*args, **kwargs)
         if options.teardown is not None:
@@ -127,10 +163,10 @@ def install_import_alias(config: Config) -> None:
     package: ModuleType | None = None
     try:
         package = importlib.import_module("pytest_codspeed")
-        # Cached submodules do not automatically attach to a reimported parent.
         vars(package).setdefault("plugin", plugin)
-        config_module = importlib.import_module("pytest_codspeed.config")
-        vars(package).setdefault("config", config_module)
+        # Cached submodules do not automatically attach to a reimported parent.
+        if (config_module := sys.modules.get("pytest_codspeed.config")) is not None:
+            vars(package).setdefault("config", config_module)
     except BaseException:
         if sys.modules.get(name) is plugin:
             del sys.modules[name]

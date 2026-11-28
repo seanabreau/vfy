@@ -48,22 +48,10 @@ def pytest_addoption(parser: Parser) -> None:
 
 
 def pytest_configure(config: Config) -> None:
-    fixture_scope = cast("str | None", config.getini("asyncio_default_fixture_loop_scope") or None)
-    if fixture_scope == "fixture-scope":
-        manager = config.pluginmanager
-        adapter = manager.get_plugin("asyncio")
-        if any(
-            plugin is adapter and distribution.version.startswith("1.4.")
-            for plugin, distribution in manager._plugin_distinfo
-        ):
-            raise native._pytest.IndependentUsageError(
-                "'fixture-scope' is not a valid asyncio_default_fixture_loop_scope. "
-                "Valid scopes are: function, class, module, package, session."
-            )
     try:
         native.validate_asyncio_config(
             "strict",
-            fixture_scope,
+            cast("str | None", config.getini("asyncio_default_fixture_loop_scope") or None),
             cast("str", config.getini("asyncio_default_test_loop_scope")),
         )
     except ValueError as error:
