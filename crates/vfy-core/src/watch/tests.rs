@@ -19,12 +19,12 @@ fn modified(path: PathBuf) -> Event {
 #[test]
 fn replacing_an_input_with_a_directory_restarts_both_tree_digests() {
     let directory = tempfile::tempdir().expect("root");
-    let root = directory.path();
+    let root = directory.path().canonicalize().expect("canonical root");
     let input = root.join("input");
     std::fs::write(&input, "old input").expect("source");
     let mut replace_input = true;
     let captured = capture_tree_identity(TreeIdentityMode::Both, |digests| {
-        hash_tree(root, root, &[], digests)?;
+        hash_tree(&root, &root, &[], digests)?;
         if std::mem::take(&mut replace_input) {
             std::fs::remove_file(&input)?;
             // Model a read after the metadata lookup saw the old file.
@@ -41,7 +41,7 @@ fn replacing_an_input_with_a_directory_restarts_both_tree_digests() {
             digest_hex(captured.content).expect("retry content"),
             digest_hex(captured.metadata).expect("retry metadata"),
         ),
-        source_tree_identities(&[root.to_path_buf()], &[]).expect("clean scan"),
+        source_tree_identities(&[directory.path().to_path_buf()], &[]).expect("clean scan"),
     );
 }
 
