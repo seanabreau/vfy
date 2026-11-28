@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.support import VfyProject
+from tests.support.platforms import requires_native_pytest
 
 _PLUGIN = (
     "import coverage\n"
@@ -187,7 +188,9 @@ def test_report_omit_comes_from_the_report_section_like_coverage_py(
     assert (actual.returncode, actual.stdout) == (expected.returncode, expected.stdout)
 
 
-@pytest.mark.parametrize("entry_point", ["cli", "pytest"])
+@pytest.mark.parametrize(
+    "entry_point", ["cli", "pytest", pytest.param("native", marks=requires_native_pytest)]
+)
 @pytest.mark.parametrize("warning", ["default", "suppressed", "error"])
 def test_source_takes_precedence_over_run_include(
     tmp_path: Path, entry_point: str, warning: str
@@ -213,6 +216,8 @@ def test_source_takes_precedence_over_run_include(
         cli = ("-m", "coverage") if module == "coverage" else ("-m", "vfy", "coverage")
         if entry_point == "cli":
             result = project.run_python(*cli, "run", "test_run.py", env=env)
+        elif entry_point == "native" and module == "vfy":
+            result = project.run_vfy("test", "--engine=native", "--cov", "-q", env=env)
         else:
             result = project.run_python("-m", "pytest", "-p", plugin, "--cov", "-q", env=env)
 

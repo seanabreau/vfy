@@ -422,9 +422,10 @@ impl<'py> Collector<'py> {
             // fixture is absent; tests that request it report the missing fixture.
             "mark" | "main" | "runner" | "helpconfig" | "python" | "debugging" | "unittest"
             | "skipping" | "pastebin" | "assertion" | "freeze_support" | "setuponly"
-            | "setupplan" | "stepwise" | "warnings" | "reports" | "python_path" | "pytester" => {
+            | "setupplan" | "stepwise" | "reports" | "python_path" | "pytester" => {
                 return Ok(());
             }
+            "warnings" => return self.activate_warning_provider(),
             "fixtures" | "legacypath" | "tmpdir" | "monkeypatch" | "recwarn" | "logging" => {
                 return self.activate_builtin_provider(name);
             }

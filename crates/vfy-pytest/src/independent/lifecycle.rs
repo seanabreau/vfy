@@ -488,11 +488,6 @@ impl Context {
     }
 
     pub(super) fn start(&self, py: Python<'_>) -> PyResult<()> {
-        let warnings = py
-            .import("vfy.independent.protocol")?
-            .getattr("BuiltinWarnings")?
-            .call0()?;
-        self.register(py, warnings.unbind(), "warnings")?;
         self.capture_warnings(py, "config", || self.start_session(py))
     }
 
