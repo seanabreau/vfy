@@ -21,7 +21,7 @@ older, and PyPy, are unsupported.
 | `vfy test --engine=pytest-native` | Experimental; Linux and macOS; stable pytest `>=9.1` | Explicit compatibility route; worker and watch boundary tests |
 | pluggy | `>=1.5,<2` with `vfy[pytest]` | CI floor: 1.5.0 with pytest 9.1.0; locked reference: 1.6.0 |
 | Hypothesis | Optional; final 6.x releases from 6.152.1 for independent execution | Locked reference: 6.170.5 |
-| pytest-xdist | Optional, stable `>=3.6.1,<3.9` with `--engine=pytest-native` | Direct pytest and native minimum lane: 3.6.1; locked native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, xdist 3.8.0 loses the group suffix used by `--dist=loadgroup` |
+| pytest-xdist | Optional, stable `>=3.6.1,<3.9` with `--engine=pytest-native` | Direct pytest and native minimum lane: 3.6.1; locked native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, the tested xdist releases from 3.6.1 through 3.8.0 omit the group suffix used by `--dist=loadgroup` |
 | pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
 | pytest-html | `4.2.0` (integration) | 4.2.0 |
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
