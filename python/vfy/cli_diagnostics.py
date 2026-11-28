@@ -399,9 +399,9 @@ def _diagnostics_static_scan(
         PYTEST_MOCK_PLUGIN_NAMES,
         pytest_mock_supported_version,
     )
-    from ._pytest.platformdirs_support import (  # noqa: PLC0415 - share reviewed fixture policy
+    from ._pytest.platformdirs_support import (  # noqa: PLC0415 - share fixture admission policy
         PLATFORMDIRS_PLUGIN_MODULE,
-        platformdirs_plugin_reviewed,
+        platformdirs_plugin_verified,
     )
     from ._pytest.plugin_support import (  # noqa: PLC0415 - share built-in plug-in policy
         PYTESTER_PLUGIN_NAMES,
@@ -417,7 +417,7 @@ def _diagnostics_static_scan(
     findings: list[_DiagnosticsFinding] = []
     runtime_hooks: list[_DiagnosticsFinding] = []
     supported_mock = pytest_mock_supported_version()
-    supported_platformdirs = platformdirs_plugin_reviewed()
+    supported_platformdirs = platformdirs_plugin_verified()
     supported_xdist = xdist_supported_version()
     enabled_xdist = supported_xdist and xdist_requested(
         arguments, [*plugins, *(name for kind, name, _path, _line in records if kind == "plugin")]
