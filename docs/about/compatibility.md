@@ -22,9 +22,9 @@ older, and PyPy, are unsupported.
 | pluggy | `>=1.5,<2` with `vfy[pytest]` | CI floor: 1.5.0 with pytest 9.1.0; locked reference: 1.6.0 |
 | Hypothesis | Optional; final 6.x releases from 6.152.1 for independent execution | Locked reference: 6.170.5 |
 | pytest-xdist | Optional; native execution supports 3.8.0 | Direct pytest minimum lane: 3.6.1; native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, xdist 3.8.0 loses the group suffix used by `--dist=loadgroup` |
-| pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
-| pytest-html | `4.2.0` (integration) | 4.2.0 |
-| pytest-metadata | `3.1.1` (integration) | 3.1.1 |
+| pytest-cov | vfy supplies the documented coverage options | 7.1.0 reference; integration environment uses `>=7.1,<8` |
+| pytest-html | vfy supplies the documented HTML report features | 4.2.0 reference |
+| pytest-metadata | vfy supplies the documented metadata fixture and options | 3.1.1 reference |
 | pytest-asyncio | Built into the native engine; installation is optional | 1.4.0, 1.4.1.post1, and 1.5.0 differentials |
 | pytest-mock | Optional, `>=3.13,<4` for native execution | Scoped fixtures, patch cleanup, and assertion diagnostics compared with stock pytest |
 | pytest-randomly | Optional, `5.0.0` for native execution | Original collection and setup, call, and teardown reseeding hooks; requires the installed upstream module |
