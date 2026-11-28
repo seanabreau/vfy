@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
+from packaging.specifiers import SpecifierSet
 
 from tests.support import VfyProject
 from tests.support.platforms import requires_native_pytest
@@ -18,12 +19,15 @@ def _has_reference() -> bool:
         version = importlib.metadata.version("pytest-codspeed")
     except importlib.metadata.PackageNotFoundError:
         return False
-    return version in {"5.0.3", "5.0.4"}
+    return SpecifierSet(">=4.3").contains(version, prereleases=True)
 
 
 pytestmark = [
     requires_native_pytest,
-    pytest.mark.skipif(not _has_reference(), reason="requires pytest-codspeed 5.0.3 or 5.0.4"),
+    pytest.mark.skipif(
+        not _has_reference(),
+        reason="stock comparison requires the mode options added in pytest-codspeed 4.3",
+    ),
 ]
 
 
@@ -126,13 +130,14 @@ def test_skip():
     importlib.util.find_spec("pytest_benchmark") is not None,
     reason="requires CodSpeed's benchmark alias without pytest-benchmark",
 )
-def test_inactive_codspeed_matches_installed_plugin(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mode", ["simulation", "memory", "walltime"])
+def test_inactive_codspeed_matches_installed_plugin(tmp_path: Path, mode: str) -> None:
     projects = [VfyProject(tmp_path / name) for name in ("pytest", "vfy")]
     for project in projects:
         project.write("test_sample.py", SOURCE)
     env = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": None, "CODSPEED_ENV": None}
     options = (
-        "--codspeed-mode=walltime",
+        f"--codspeed-mode={mode}",
         "--codspeed-warmup-time=1.25",
         "--codspeed-max-time=2.5",
         "--codspeed-max-rounds=3",
@@ -266,6 +271,57 @@ def check_binding():
     assert "pytest_codspeed is already imported" in result.stdout + result.stderr
     assert (tmp_path / "preloaded-preserved").exists()
     assert not (tmp_path / "ran").exists()
+
+
+@pytest.mark.parametrize("feature", ["simple", "tuning", "pedantic"])
+def test_missing_upstream_config_is_checked_when_used(tmp_path: Path, feature: str) -> None:
+    project = VfyProject(tmp_path)
+    startup = project.write(
+        "startup/sitecustomize.py",
+        """import sys
+
+class MissingConfig:
+    def find_spec(self, fullname, *args):
+        if fullname == "pytest_codspeed.config":
+            raise ModuleNotFoundError(fullname, name=fullname)
+
+sys.meta_path.insert(0, MissingConfig())
+""",
+    )
+    call = ".pedantic" if feature == "pedantic" else ""
+    project.write(
+        "test_sample.py",
+        "from pathlib import Path\n"
+        "from pytest_codspeed import BenchmarkFixture\n\n"
+        "def test_body(codspeed_benchmark):\n"
+        "    Path('entered').touch()\n"
+        "    assert isinstance(codspeed_benchmark, BenchmarkFixture)\n"
+        f"    assert codspeed_benchmark{call}(lambda: 123) == 123\n",
+    )
+    args = ("--codspeed-max-rounds=3",) if feature == "tuning" else ()
+    result = project.run_vfy(
+        "test",
+        "--engine=native",
+        "--no-cov",
+        "-q",
+        "-p",
+        "codspeed",
+        *args,
+        env={"PYTHONPATH": str(startup.parent), "CODSPEED_ENV": None},
+    )
+    if feature == "simple":
+        result.expect(0)
+    else:
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "--engine=pytest" in output
+        expected = (
+            "--codspeed-max-rounds requires the installed pytest-codspeed"
+            if feature == "tuning"
+            else "CodSpeed BenchmarkFixture.pedantic requires the installed pytest-codspeed"
+        )
+        assert expected in output
+    assert (tmp_path / "entered").exists() is (feature != "tuning")
 
 
 def test_repeated_sessions_restore_public_config_namespace(tmp_path: Path) -> None:

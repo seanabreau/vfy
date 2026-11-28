@@ -121,6 +121,11 @@ async def test_round_trip(queue):
 Scopes are `function`, `class`, `module`, `package`, and `session`. Tests default to
 function scope. A loop is shared only when you ask for it.
 
+Set `asyncio_default_fixture_loop_scope = "fixture-scope"` to use each async
+fixture's caching scope when its declaration omits `loop_scope`. This works
+with vfy’s native engine regardless of the installed pytest-asyncio version.
+When running stock pytest, the explicit setting requires pytest-asyncio 1.5 or later.
+
 vfy's adapter acquires the `event_loop_policy` fixture only when a runner needs it,
 so synchronous tests do not use it. Override this session fixture to supply a
 custom policy. A pytest-asyncio compatibility alias activated before vfy's adapter

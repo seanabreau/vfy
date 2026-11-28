@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 import xml.etree.ElementTree as ET
-from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -152,7 +151,6 @@ def test_native_async_lifecycle_matches_stock_vfy_and_pytest_asyncio(
     tmp_path: Path, mode: str
 ) -> None:
     pytest.importorskip("pytest_asyncio")
-    assert version("pytest-asyncio") == "1.4.0"
 
     projects: dict[str, VfyProject] = {}
     for name in ("pytest-native", "vfy", "upstream"):
@@ -598,7 +596,6 @@ def test_native_strict_mode_matches_unhandled_async_fixture_behavior(
 
 def test_parameter_asyncio_marks_preserve_loop_scope_and_marker_precedence(tmp_path: Path) -> None:
     pytest.importorskip("pytest_asyncio")
-    assert version("pytest-asyncio") == "1.4.0"
     source = """import asyncio
 import pytest
 
