@@ -2,6 +2,7 @@
 
 import json
 from importlib.metadata import entry_points
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -219,6 +220,24 @@ def test_unavailable(request):
         "-q",
         "test_unavailable.py",
         env={**env, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+    ).expect(0)
+
+    installed_timeout = find_spec("pytest_timeout")
+    assert installed_timeout is not None
+    assert installed_timeout.origin is not None
+    project.write(
+        (site_packages / "pytest_timeout.py").as_posix(),
+        Path(installed_timeout.origin).read_text(encoding="utf-8"),
+    )
+    project.run(
+        python,
+        *arguments,
+        "-p",
+        "pytest_timeout",
+        "--timeout=1",
+        "--benchmark-disable",
+        "test_owned.py",
+        env=env,
     ).expect(0)
 
     project.write((site_packages / "pytest_mock.py").as_posix(), "provider = 'installed module'\n")

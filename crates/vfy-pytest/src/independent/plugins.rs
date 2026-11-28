@@ -49,6 +49,7 @@ const ALIASES: &[(&str, &str)] = &[
 /// A vfy plug-in that fills in for a provider that did not load.
 struct Replacement {
     entry_points: &'static [&'static str],
+    explicit_names: &'static [&'static str],
     module: &'static str,
     alias_module: &'static str,
     aliases: &'static [&'static str],
@@ -57,30 +58,35 @@ struct Replacement {
 const REPLACEMENTS: &[Replacement] = &[
     Replacement {
         entry_points: &[ASYNCIO_PLUGIN],
+        explicit_names: &[],
         module: "vfy.independent.asyncio_support",
         alias_module: "vfy.independent.asyncio_support",
         aliases: &[],
     },
     Replacement {
         entry_points: &["pytest_mock"],
+        explicit_names: &["pytest_mock.plugin"],
         module: "vfy.independent.mock_fixtures",
         alias_module: "vfy.independent.mock_support",
         aliases: &["pytest_mock"],
     },
     Replacement {
         entry_points: &["benchmark", "codspeed"],
+        explicit_names: &["pytest_benchmark.plugin"],
         module: "vfy.independent.benchmark",
         alias_module: "vfy.independent.benchmark",
         aliases: &[],
     },
     Replacement {
         entry_points: &["timeout"],
+        explicit_names: &["pytest_timeout"],
         module: "vfy.independent.timeout",
         alias_module: "vfy.independent.timeout",
         aliases: &[],
     },
     Replacement {
         entry_points: &["xdist"],
+        explicit_names: &["xdist.plugin"],
         module: "vfy.independent.xdist_support",
         alias_module: "vfy.independent.xdist_support",
         aliases: &[],
@@ -631,20 +637,25 @@ impl<'py> Collector<'py> {
         };
         let config = config.bind(self.py);
         let manager = config.getattr("pluginmanager")?;
-        for replacement in REPLACEMENTS {
-            let mut unavailable = false;
+        'replacements: for replacement in REPLACEMENTS {
             for name in replacement.entry_points {
-                if manager.call_method1("has_plugin", (*name,))?.is_truthy()?
-                    || manager.call_method1("is_blocked", (*name,))?.is_truthy()?
-                {
-                    unavailable = true;
-                    break;
+                if manager.call_method1("is_blocked", (*name,))?.is_truthy()? {
+                    continue 'replacements;
                 }
             }
-            if unavailable
-                || manager
-                    .call_method1("is_blocked", (replacement.module,))?
-                    .is_truthy()?
+            // Explicit module loads do not need an entry point to own their hooks.
+            for name in replacement
+                .entry_points
+                .iter()
+                .chain(replacement.explicit_names)
+            {
+                if manager.call_method1("has_plugin", (*name,))?.is_truthy()? {
+                    continue 'replacements;
+                }
+            }
+            if manager
+                .call_method1("is_blocked", (replacement.module,))?
+                .is_truthy()?
             {
                 continue;
             }
