@@ -21,13 +21,14 @@ older, and PyPy, are unsupported.
 | `vfy test --engine=pytest-native` | Experimental; Linux and macOS; stable pytest `>=9.1` | Explicit compatibility route; worker and watch boundary tests |
 | pluggy | `>=1.5,<2` with `vfy[pytest]` | CI floor: 1.5.0 with pytest 9.1.0; locked reference: 1.6.0 |
 | Hypothesis | Optional; final 6.x releases from 6.152.1 for independent execution | Locked reference: 6.170.5 |
-| pytest-xdist | Optional; native execution supports 3.8.0 | Direct pytest minimum lane: 3.6.1; native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, xdist 3.8.0 loses the group suffix used by `--dist=loadgroup` |
+| pytest-xdist | Optional, stable `>=3.6.1,<3.9` with `--engine=pytest-native` | Direct pytest and native minimum lane: 3.6.1; locked native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, the tested xdist releases from 3.6.1 through 3.8.0 omit the group suffix used by `--dist=loadgroup` |
 | pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
 | pytest-html | `4.2.0` (integration) | 4.2.0 |
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
 | pytest-asyncio | Built into the native engine; installation is optional | 1.4.0, 1.4.1.post1, and 1.5.0 differentials |
 | pytest-mock | Optional, `>=3.13,<4` for native execution | Scoped fixtures, patch cleanup, and assertion diagnostics compared with stock pytest |
-| pytest-randomly | Optional, `5.0.0` for native execution | Original collection and setup, call, and teardown reseeding hooks; requires the installed upstream module |
+| pytest-randomly | Optional. `pytest-native` admits final `>=5,<6` releases from the installed upstream distribution. The independent engine loads its ordinary pytest entry point. | Test order, setup, call and teardown reseeding, and worker seeds compared with stock pytest on 5.0.0 and 5.1.0 |
+| pytest-random-order | Optional, final `>=1.1,<2` with `--engine=pytest-native` and pytest-xdist | Seed handoff and collection order compared with stock pytest |
 | pytest-timeout | Optional, `>=2.4,<2.5` for native execution; `signal` method in the main thread; session timeouts require `--workers=1` | Marker, configuration, command-line, environment, `func_only`, and serial session timeouts compared with stock pytest; reference 2.4.0 |
 | pytest-benchmark | Optional, `>=5.3,<5.4` for native execution; measures with `--workers=1` | Fixture, `pedantic`, marker options, disable, skip and only modes, JSON output, and skipped-test cleanup compared with stock pytest; reference 5.3.1 |
 | pytest-codspeed | Unmeasured calls run natively; tuning and pedantic calls use installed helpers | The independent adapter provides unmeasured fixtures and markers, including the package’s `BenchmarkFixture` import. Use `--engine=pytest` for measurement, instrumentation, and other plug-in internals, including `--codspeed` and `CODSPEED_ENV`. |
@@ -424,7 +425,8 @@ fixture lifetime and configuration on each engine.
 checks. Direct-pytest coverage integration requires pytest-xdist 3.6.1 or newer;
 upstream withdrew 3.6.0 for a
 [pytest-cov regression](https://pytest-xdist.readthedocs.io/en/latest/changelog.html#pytest-xdist-3-6-0-2024-04-19).
-Native xdist execution targets 3.8.0. Performance has
+The pytest-native engine supports stable pytest-xdist releases from 3.6.1
+through the 3.8 series and checks the installed worker and scheduler protocol. Performance has
 [separate gates](benchmarks.md#how-to-read-benchmark-evidence).
 
 The owned adapter acquires event-loop policies on demand. A pytest-asyncio

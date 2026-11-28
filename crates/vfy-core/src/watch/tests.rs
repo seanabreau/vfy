@@ -5,8 +5,44 @@ fn session(root: &Path) -> WatchSession {
     WatchSession::new(&[root.to_path_buf()], &[], None).expect("register temporary watch root")
 }
 
+fn isolate_events(session: &mut WatchSession) -> mpsc::Sender<notify::Result<Event>> {
+    // Keep the channel open for tests that control event delivery themselves.
+    let (sender, receiver) = mpsc::channel();
+    session.receiver = receiver;
+    sender
+}
+
 fn modified(path: PathBuf) -> Event {
     Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content))).add_path(path)
+}
+
+#[test]
+fn replacing_an_input_with_a_directory_restarts_both_tree_digests() {
+    let directory = tempfile::tempdir().expect("root");
+    let root = directory.path().canonicalize().expect("canonical root");
+    let input = root.join("input");
+    std::fs::write(&input, "old input").expect("source");
+    let mut replace_input = true;
+    let captured = capture_tree_identity(TreeIdentityMode::Both, |digests| {
+        hash_tree(&root, &root, &[], digests)?;
+        if std::mem::take(&mut replace_input) {
+            std::fs::remove_file(&input)?;
+            // Model a read after the metadata lookup saw the old file.
+            let stale_read = std::fs::read(&input);
+            std::fs::create_dir(&input)?;
+            std::fs::write(input.join("replacement.py"), "new input")?;
+            stale_read?;
+        }
+        Ok(())
+    })
+    .expect("retry the interrupted scan");
+    assert_eq!(
+        (
+            digest_hex(captured.content).expect("retry content"),
+            digest_hex(captured.metadata).expect("retry metadata"),
+        ),
+        source_tree_identities(&[directory.path().to_path_buf()], &[]).expect("clean scan"),
+    );
 }
 
 #[test]
@@ -215,6 +251,7 @@ fn idle_parent_events_ignore_generated_assets_and_detect_source_edits() {
 fn idle_empty_directory_creation_requires_a_full_run() {
     let root = tempfile::tempdir().expect("temporary root");
     let mut session = session(root.path());
+    let _events = isolate_events(&mut session);
     session.begin_run().expect("begin baseline run");
     session
         .finish_run(RunOutcome::PassedFull)
@@ -377,9 +414,7 @@ fn current_publication_preserves_unrelated_report_files() {
         None,
     )
     .expect("watch");
-    // Exercise input hashing and publication without asynchronous backend events.
-    let (_events, receiver) = mpsc::channel();
-    session.receiver = receiver;
+    let _events = isolate_events(&mut session);
     session.begin_run().expect("begin run");
     assert!(
         session
@@ -403,6 +438,7 @@ fn current_publication_preserves_unrelated_report_files() {
 fn events_in_the_initial_snapshot_do_not_schedule_duplicate_runs() {
     let root = tempfile::tempdir().expect("root");
     let mut session = session(root.path());
+    let _events = isolate_events(&mut session);
     let now = Instant::now();
     session.accept_at(
         Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.path().join("app.py"))),
@@ -471,9 +507,7 @@ fn finalization_consumes_the_execution_before_another_save() {
     std::fs::write(&source, "original").expect("source");
     std::fs::write(stage.path().join("data"), "accepted evidence").expect("data");
     let mut session = session(root.path());
-    // Verify the commit point with filesystem contents as the only input changes.
-    let (_events, receiver) = mpsc::channel();
-    session.receiver = receiver;
+    let _events = isolate_events(&mut session);
     session.begin_run().expect("begin");
     assert_eq!(
         session

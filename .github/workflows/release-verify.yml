@@ -321,7 +321,10 @@ jobs:
         shell: bash
         run: |
           uv pip install "pytest==9.1.1" "pytest-xdist==3.6.1"
-          uv run --no-sync pytest -q tests/integration/test_pytest_cov_compat.py
+          uv run --no-sync pytest -q tests/integration/test_pytest_cov_compat.py \
+            tests/integration/test_native_xdist_coverage.py
+          uv run --no-sync pytest -q tests/integration/test_native_xdist.py \
+            -k "uses_upstream_schedulers_fixtures_and_worker_hooks or transports_fixture_failures_skips_and_junit_outcomes"
       - name: Check asyncio compatibility with pinned pytest
         if: matrix.id == 'linux-x86_64' && matrix.python == '3.12'
         shell: bash

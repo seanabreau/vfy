@@ -54,10 +54,17 @@ def _project(root: Path) -> VfyProject:
     "route",
     ["native", "pytest-native", "native-xdist", "native-xdist-canonical", "native-xdist-serial"],
 )
-def test_default_ordering_seeds_match_controller_and_stock_worker_values(
-    tmp_path: Path, route: str
+@pytest.mark.parametrize("seed_option", ["default", "last"])
+def test_ordering_seeds_match_controller_and_stock_worker_values(
+    tmp_path: Path, route: str, seed_option: str
 ) -> None:
     project = _project(tmp_path / "vfy")
+    environment = {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": None,
+        "PYTHONHASHSEED": "0",
+        "VFY_WORKER_START": "exec",
+        "VFY_WORKER_COLLECTION": "0",
+    }
     arguments = (
         [
             "--engine=pytest-native",
@@ -69,20 +76,30 @@ def test_default_ordering_seeds_match_controller_and_stock_worker_values(
     if route in {"native-xdist-canonical", "native-xdist-serial"}:
         arguments.extend(("-p", "xdist"))
     reorder = ["--random-order"] if route == "pytest-native" else []
+    if seed_option == "last":
+        engine = "native" if route == "native" else "pytest-native"
+        project.run_vfy(
+            "test",
+            f"--engine={engine}",
+            "--no-cov",
+            "--collect-only",
+            "--randomly-seed=137",
+            "-p",
+            "no:pytest-testmon",
+            "-q",
+            env=environment,
+        ).expect(0)
+        (project.root / "configs" / "controller.json").unlink()
     completed = project.run_vfy(
         "test",
         *arguments,
         *reorder,
         "--no-cov",
+        f"--randomly-seed={seed_option}",
         "-p",
         "no:pytest-testmon",
         "-q",
-        env={
-            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": None,
-            "PYTHONHASHSEED": "0",
-            "VFY_WORKER_START": "exec",
-            "VFY_WORKER_COLLECTION": "0",
-        },
+        env=environment,
     )
     completed.expect(0)
     configurations = {
@@ -92,6 +109,8 @@ def test_default_ordering_seeds_match_controller_and_stock_worker_values(
     assert len(configurations) == (1 if route.endswith("serial") else 3), configurations
     seed = configurations["controller"]["seed"]
     assert isinstance(seed, int)
+    if seed_option == "last":
+        assert seed == 137
     assert {configuration["seed"] for configuration in configurations.values()} == {seed}
     order_seed = configurations["controller"]["order_seed"]
     assert order_seed.startswith("default:")
