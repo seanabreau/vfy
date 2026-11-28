@@ -165,12 +165,25 @@ def test_logs(monkeypatch):
         assert result.returncode == status, result.stdout + result.stderr
 
 
-def test_warning_hook_observes_collection_and_whole_test_protocol(tmp_path: Path) -> None:
+def test_warning_hook_observes_startup_collection_and_test_protocol(tmp_path: Path) -> None:
     project = VfyProject(tmp_path)
+    project.write(
+        "startup_wrapper.py",
+        """import warnings
+import pytest
+@pytest.hookimpl(wrapper=True)
+def pytest_load_initial_conftests():
+    warnings.warn('outer startup warning before yield')
+    yield
+    warnings.warn('outer startup warning after yield')
+""",
+    )
     project.write(
         "conftest.py",
         """import json
+import warnings
 from pathlib import Path
+warnings.warn('initial conftest warning')
 seen = []
 def pytest_warning_recorded(warning_message, when, nodeid, location):
     seen.append([str(warning_message.message), warning_message.category.__name__,
@@ -195,6 +208,7 @@ def test_warns():
 """,
     )
     expected = [
+        ["initial conftest warning", "UserWarning", "config", "", None],
         ["collection warning", "DeprecationWarning", "collect", "", None],
         [
             "setup warning",
@@ -206,17 +220,47 @@ def test_warns():
         ["call warning", "UserWarning", "runtest", "test_warnings.py::test_warns", None],
         ["teardown warning", "UserWarning", "runtest", "test_warnings.py::test_warns", None],
     ]
-    for engine, result in _runs(project, []):
+    for engine, result in _runs(project, ["-p", "startup_wrapper"]):
         assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.count("UserWarning: initial conftest warning") == 1
+        for phase in ["before", "after"]:
+            warning = f"UserWarning: outer startup warning {phase} yield"
+            assert warning not in result.stdout
+            assert result.stderr.count(warning) == 1
         assert json.loads((tmp_path / "warnings.json").read_text()) == expected
         (tmp_path / "warnings.json").unlink()
         if engine == "vfy":
             record = json.loads((tmp_path / "results.json").read_text())
-            assert len(record["warnings"]) == 4
+            assert len(record["warnings"]) == len(expected)
             assert [warning["nodeid"] for warning in record["warnings"]] == [
+                "",
                 "",
                 *["test_warnings.py::test_warns"] * 3,
             ]
+
+
+@pytest.mark.parametrize(
+    ("settings", "arguments", "status"),
+    [
+        ("filterwarnings = error\n", [], 4),
+        ("filterwarnings = ignore\n", ["-W", "error"], 4),
+        ("", ["-p", "no:warnings", "-W", "error"], 0),
+        ("", ["-p", "no:warnings", "-p", "warnings", "-W", "error"], 4),
+    ],
+)
+def test_initial_conftest_warnings_respect_filters_and_plugin_disable(
+    tmp_path: Path, settings: str, arguments: list[str], status: int
+) -> None:
+    project = VfyProject(tmp_path)
+    project.write("pytest.ini", "[pytest]\n" + settings)
+    project.write("conftest.py", "import warnings\nwarnings.warn('startup warning')\n")
+    project.write("test_example.py", "def test_example():\n    assert True\n")
+    for _, result in _runs(project, arguments):
+        assert result.returncode == status, result.stdout + result.stderr
+        if status == 4:
+            assert "UserWarning: startup warning" in result.stderr
+        else:
+            assert "1 passed" in result.stdout
 
 
 @pytest.mark.parametrize(

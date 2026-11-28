@@ -15,6 +15,7 @@ from collections.abc import (
     MutableMapping,
     Sequence,
 )
+from contextlib import AbstractContextManager
 from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
@@ -1153,7 +1154,15 @@ class BuiltinTerminalHooks:
 
 
 class BuiltinWarnings:
-    """Enter warning scopes at pytest's real session and summary hook positions."""
+    """Enter warning scopes at pytest's startup, session, and summary hooks."""
+
+    def __init__(self, initial_scope: Callable[[Config], AbstractContextManager[object]]) -> None:
+        self._initial_scope = initial_scope
+
+    @hookimpl(wrapper=True)
+    def pytest_load_initial_conftests(self, early_config: Config) -> Iterator[object]:
+        with self._initial_scope(early_config):
+            return (yield)
 
     @hookimpl(wrapper=True)
     def pytest_sessionfinish(self, session: Session) -> Iterator[object]:
