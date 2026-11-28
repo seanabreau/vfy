@@ -403,6 +403,9 @@ fn current_publication_preserves_unrelated_report_files() {
 fn events_in_the_initial_snapshot_do_not_schedule_duplicate_runs() {
     let root = tempfile::tempdir().expect("root");
     let mut session = session(root.path());
+    // An asynchronous backend event can invalidate the snapshot during this test.
+    let (_events, receiver) = mpsc::channel();
+    session.receiver = receiver;
     let now = Instant::now();
     session.accept_at(
         Ok(Event::new(EventKind::Create(CreateKind::File)).add_path(root.path().join("app.py"))),
