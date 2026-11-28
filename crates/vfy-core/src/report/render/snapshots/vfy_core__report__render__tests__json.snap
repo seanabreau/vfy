@@ -1,11 +1,11 @@
 ---
 source: crates/vfy-core/src/report/render/tests.rs
-expression: "with_row(true, |rows|\nscrub_json_timestamp(&render_json(rows, true, true, 1).expect(\"JSON report\")))"
+expression: "with_row(true, |rows|\nnormalize_json_metadata(&render_json(rows, true, true,\n1).expect(\"JSON report\")))"
 ---
 {
   "meta": {
     "format": 3,
-    "version": "vfy 0.0.1",
+    "version": "vfy <version>",
     "show_contexts": true,
     "branch_coverage": true
   },

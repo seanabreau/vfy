@@ -88,7 +88,7 @@ request runs repository checks, dependency hygiene, and workflow analysis.
 | Code, tests, or workflow files | Build one Linux wheel and run the complete Python suite on CPython 3.12 |
 | Rust crates, build metadata, lockfiles, or Rust test scripts | Linux wheel and Linux Rust lints, workspace tests, and snapshot checks |
 | Missing or unrecognized paths | Linux wheel, Rust checks, and strict site build |
-| Release workflow, packaging checks, or adoption tooling | Release verification with the platform matrix and pinned adoption suites |
+| Workspace version, release workflow, packaging checks, or adoption tooling | Release verification with the platform matrix and pinned adoption suites |
 | Native corpus workflow, corpus tooling, or corpus policy | Linux CPython 3.12 wheel, focused differentials, pinned corpus inventory, and execution accounting checks |
 
 Release verification covers the wheel and Rust checks for its pull request.

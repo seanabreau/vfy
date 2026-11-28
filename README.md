@@ -81,7 +81,7 @@ changes trigger a full run. [Selection rules](https://github.com/seanabreau/vfy/
 
 ### Which platforms does vfy support?
 
-vfy 0.0.1 supports Linux and macOS. See the [installation guide](https://vfy.neocline.com/getting-started/installation/) for compatible wheels.
+vfy supports Linux and macOS. See the [installation guide](https://vfy.neocline.com/getting-started/installation/) for compatible wheels.
 
 ## Contributing
 

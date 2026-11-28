@@ -199,8 +199,11 @@ def test_resource_deadline_cleans_up_child_and_grandchild(tmp_path: Path) -> Non
     for _ in range(20):
         alive = []
         for pid in pids:
-            status = Path(f"/proc/{pid}/stat")
-            if status.exists() and status.read_text().rsplit(")", 1)[1].split()[0] != "Z":
+            try:
+                status = Path(f"/proc/{pid}/stat").read_text()
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            if status.rsplit(")", 1)[1].split()[0] != "Z":
                 alive.append(pid)
         if not alive:
             break

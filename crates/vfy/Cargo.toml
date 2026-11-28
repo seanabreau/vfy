@@ -32,7 +32,7 @@ tempfile.workspace = true
 toml.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-vfy-pytest = { path = "../vfy-pytest", version = "=0.0.1" }
+vfy-pytest = { path = "../vfy-pytest", version = "=0.0.2" }
 
 [dev-dependencies]
 proptest.workspace = true

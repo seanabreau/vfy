@@ -72,8 +72,11 @@ def _wait_for_watch_path(
     try:
         return project.wait_for_path(relative, timeout)
     except TimeoutError as error:
+        status = command.poll()
+        process = "running" if status is None else f"exited {status}"
         raise TimeoutError(
-            f"{error}\nwatch stdout:\n{command.text('stdout')}\nwatch stderr:\n{command.text()}"
+            f"{error}\nwatch process: {process}\n"
+            f"watch stdout:\n{command.text('stdout')}\nwatch stderr:\n{command.text()}"
         ) from error
 
 
@@ -226,7 +229,7 @@ def test_watch_queues_an_edit_and_uses_fresh_pytest_processes(tmp_path: Path) ->
     result = None
     try:
         command.wait_for("Watch run 1: starting")
-        project.wait_for_path(".vfy/started")
+        _wait_for_watch_path(command, project, ".vfy/started")
         project.write("app.py", "VALUE = 2\n")
         project.write(".vfy/release", "ready")
         obsolete_run = _wait_for_watch_event(
