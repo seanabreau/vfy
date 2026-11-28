@@ -123,6 +123,8 @@ function scope. A loop is shared only when you ask for it.
 
 Set `asyncio_default_fixture_loop_scope = "fixture-scope"` to use each async
 fixture's caching scope when its declaration omits `loop_scope`.
+When the independent engine loads an installed pytest-asyncio 1.4.x plug-in,
+leave the setting unset to use the fixture's caching scope.
 
 vfy's adapter acquires the `event_loop_policy` fixture only when a runner needs it,
 so synchronous tests do not use it. Override this session fixture to supply a

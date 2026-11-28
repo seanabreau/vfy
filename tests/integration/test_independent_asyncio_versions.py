@@ -12,6 +12,7 @@ from tests.support import VfyProject
 from tests.support.platforms import requires_native_pytest
 
 pytestmark = requires_native_pytest
+_LEGACY_REFERENCE = version("pytest-asyncio").startswith("1.4.")
 
 
 def test_installed_asyncio_version_and_fixture_lifecycle_match_reference(tmp_path: Path) -> None:
@@ -68,14 +69,34 @@ async def test_async(resource, request):
     assert observations == [([installed] * 3, "setup\ntest\nteardown\n")] * 2
 
 
-@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
 @pytest.mark.parametrize("workers", [1, 2])
-def test_default_fixture_scope_matches_caching_scope(tmp_path: Path, workers: int) -> None:
+@pytest.mark.parametrize(
+    "fixture_scope",
+    [
+        None,
+        pytest.param(
+            "fixture-scope",
+            marks=pytest.mark.skipif(_LEGACY_REFERENCE, reason="requires pytest-asyncio 1.5.0"),
+        ),
+    ],
+    ids=["unset", "explicit"],
+)
+def test_default_fixture_scope_matches_caching_scope(
+    tmp_path: Path, workers: int, fixture_scope: str | None
+) -> None:
+    configuration = "[pytest]\n"
+    stock_warnings: tuple[str, ...] = ()
+    if fixture_scope is not None:
+        configuration += f"asyncio_default_fixture_loop_scope = {fixture_scope}\n"
+    else:
+        stock_warnings = (
+            "-W",
+            'ignore:The configuration option "asyncio_default_fixture_loop_scope" is unset.'
+            ":pytest.PytestDeprecationWarning",
+        )
     for route in ("stock", "independent"):
         project = VfyProject(tmp_path / route)
-        project.write(
-            "pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = fixture-scope\n"
-        )
+        project.write("pytest.ini", configuration)
         for name in ("test_first", "test_second"):
             project.write(
                 f"{name}.py",
@@ -113,7 +134,7 @@ async def test_loop(module_loop, explicit_loop, case):
             )
         options = ("-q", "-p", "asyncio", "-W", "error")
         result = (
-            project.run_python("-m", "pytest", *options)
+            project.run_python("-m", "pytest", *options, *stock_warnings)
             if route == "stock"
             else project.run_vfy(
                 "test",
@@ -139,64 +160,19 @@ async def test_loop(module_loop, explicit_loop, case):
             assert set(topology["worker_pids"]) == worker_pids
 
 
-@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
-@pytest.mark.parametrize(
-    ("arguments", "message"),
-    [
-        (
-            "loop_scope='fixture-scope'",
-            "got an unexpected loop scope value 'fixture-scope'. "
-            "Valid scopes are: function, class, module, package, session.",
-        ),
-        ("'module'", "accepts only keyword arguments 'loop_scope' and 'loop_factories'."),
-        ("unexpected=True", "accepts only keyword arguments 'loop_scope' and 'loop_factories'."),
-    ],
-)
-def test_invalid_asyncio_marker_names_the_test(
-    tmp_path: Path, arguments: str, message: str
-) -> None:
+@pytest.mark.skipif(not _LEGACY_REFERENCE, reason="requires pytest-asyncio 1.4.x")
+def test_legacy_adapter_rejects_explicit_fixture_scope_before_collection(tmp_path: Path) -> None:
     project = VfyProject(tmp_path)
-    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = function\n")
-    project.write(
-        "test_async.py",
-        f"import pytest\n@pytest.mark.asyncio({arguments})\nasync def test_invalid():\n    pass\n",
-    )
+    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = fixture-scope\n")
+    project.write("test_body.py", "from pathlib import Path\nPath('collected').touch()\n")
     options = ("-q", "-p", "asyncio")
     stock = project.run_python("-m", "pytest", *options)
     independent = project.run_vfy("test", "--engine=native", "--no-cov", *options)
     for result in (stock, independent):
-        result.expect(2)
-        assert f"test_async.py::test_invalid: mark.asyncio {message}" in result.stdout
-        assert "Traceback" not in result.stdout + result.stderr
-
-
-@pytest.mark.skipif(version("pytest-asyncio") != "1.5.0", reason="requires pytest-asyncio 1.5.0")
-def test_invalid_parameter_loop_scope_names_the_case(tmp_path: Path) -> None:
-    project = VfyProject(tmp_path)
-    project.write("pytest.ini", "[pytest]\nasyncio_default_fixture_loop_scope = function\n")
-    project.write(
-        "test_async.py",
-        """import pytest
-
-@pytest.mark.parametrize('value', [
-    pytest.param(1, id='invalid', marks=pytest.mark.asyncio(loop_scope='bad')),
-])
-async def test_async(value):
-    pass
-""",
-    )
-    options = ("-q", "-p", "asyncio")
-    stock = project.run_python("-m", "pytest", *options)
-    stock.expect(1)
-    assert "fixture '_bad_scoped_runner' not found" in stock.stdout
-    assert "ERROR test_async.py::test_async[invalid]" in stock.stdout
-
-    independent = project.run_vfy("test", "--engine=native", "--no-cov", *options)
-    independent.expect(2)
-    assert "test_async.py::test_async[invalid]: mark.asyncio got an unexpected loop scope" in (
-        independent.stdout
-    )
-    assert "Traceback" not in independent.stdout + independent.stderr
+        result.expect(4)
+        assert "'fixture-scope' is not a valid asyncio_default_fixture_loop_scope." in result.stderr
+        assert "Valid scopes are: function, class, module, package, session." in result.stderr
+    assert not (project.root / "collected").exists()
 
 
 @pytest.mark.parametrize("unsupported", ["1.4.0.post1", "1.4.1.post2", "1.4.2", "1.5.1"])

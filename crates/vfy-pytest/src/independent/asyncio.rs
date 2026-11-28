@@ -1,11 +1,10 @@
 //! Async discovery and scoped runner requirements share the native fixture plan.
 use super::lifecycle::Context;
-use super::parameters::{ParameterGeneration, ParameterRow};
+use super::parameters::ParameterRow;
 use super::plugins::ASYNCIO_PLUGIN;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCFunction, PyDict, PyFunction, PyList, PyTuple};
-use std::ops::Range;
 use vfy_core::test_plan::FixtureExecution;
 use vfy_core::{AsyncioLoopScope, AsyncioMode, FixtureScope};
 
@@ -98,23 +97,11 @@ pub(super) fn fixture_scope(
         .map_err(PyValueError::new_err)
 }
 
-fn marker_error(py: Python<'_>, nodeid: &str, suffix: &str, message: &str) -> PyResult<PyErr> {
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("pytrace", false)?;
-    let failure = py
-        .import("vfy.independent.facade")?
-        .getattr("Failed")?
-        .call((format!("{nodeid}{suffix}: {message}"),), Some(&kwargs))?;
-    Ok(PyErr::from_value(failure))
-}
-
-fn test_scope(
+pub(super) fn test_scope(
     context: Option<&Context>,
-    nodeid: &str,
+    py: Python<'_>,
     marks: &Bound<'_, PyList>,
-    parameter_marks: Option<(&str, Range<usize>)>,
 ) -> PyResult<Option<AsyncioLoopScope>> {
-    let py = marks.py();
     if !enabled(context, py)? {
         return Ok(None);
     }
@@ -123,13 +110,12 @@ fn test_scope(
     };
     let marker = marks
         .iter()
-        .enumerate()
-        .find_map(|(index, mark)| {
+        .find_map(|mark| {
             match mark
                 .getattr("name")
                 .and_then(|name| name.extract::<String>())
             {
-                Ok(name) if name == "asyncio" => Some(Ok((index, mark))),
+                Ok(name) if name == "asyncio" => Some(Ok(mark)),
                 Ok(_) => None,
                 Err(error) => Some(Err(error)),
             }
@@ -138,65 +124,40 @@ fn test_scope(
     if marker.is_none() && mode(context, py)? == AsyncioMode::Strict {
         return Ok(None);
     }
-    if let Some((index, marker)) = marker {
-        let suffix = parameter_marks
-            .filter(|(_, range)| range.contains(&index))
-            .map_or("", |(suffix, _)| suffix);
-        let kwargs = marker.getattr("kwargs")?.cast_into::<PyDict>()?;
+    let explicit = if let Some(marker) = marker {
         if marker.getattr("args")?.len()? != 0 {
-            return Err(marker_error(
-                py,
-                nodeid,
-                suffix,
-                "mark.asyncio accepts only keyword arguments 'loop_scope' and 'loop_factories'.",
-            )?);
+            return Err(PyValueError::new_err(
+                "asyncio markers accept keyword arguments only",
+            ));
         }
+        let kwargs = marker.getattr("kwargs")?.cast_into::<PyDict>()?;
         for (name, _) in kwargs.iter() {
             let name = name.extract::<String>()?;
             if name == "loop_factories" {
-                return Err(marker_error(
-                    py,
-                    nodeid,
-                    suffix,
+                return Err(PyValueError::new_err(
                     "the asyncio marker argument loop_factories is not supported by the \
                      independent engine; use --engine=pytest-native",
-                )?);
+                ));
             }
             if name != "loop_scope" {
-                return Err(marker_error(
-                    py,
-                    nodeid,
-                    suffix,
-                    "mark.asyncio accepts only keyword arguments 'loop_scope' and 'loop_factories'.",
-                )?);
+                return Err(PyValueError::new_err(format!(
+                    "unsupported asyncio marker option: {name}"
+                )));
             }
         }
-        if let Some(scope) = kwargs.get_item("loop_scope")?
-            && scope.is_truthy()?
-        {
-            if let Some(scope) = scope
-                .extract::<String>()
-                .ok()
-                .and_then(|scope| AsyncioLoopScope::parse(&scope).ok())
-            {
-                return Ok(Some(scope));
-            }
-            let value = scope.repr()?;
-            return Err(marker_error(
-                py,
-                nodeid,
-                suffix,
-                &format!(
-                    "mark.asyncio got an unexpected loop scope value {value}. Valid scopes are: function, class, module, package, session."
-                ),
-            )?);
-        }
-    }
+        kwargs
+            .get_item("loop_scope")?
+            .map(|value| optional(&value))
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
     let configured = optional(&context.config.bind(py).call_method1(
         pyo3::intern!(py, "getini"),
         ("asyncio_default_test_loop_scope",),
     )?)?;
-    AsyncioLoopScope::parse(configured.as_deref().unwrap_or("function"))
+    vfy_core::plan_asyncio_loop_scope(explicit.as_deref(), configured.as_deref(), "function")
         .map(Some)
         .map_err(PyValueError::new_err)
 }
@@ -207,15 +168,15 @@ pub(super) fn runner_name(scope: AsyncioLoopScope) -> String {
 
 pub(super) fn live_test_scope(
     context: Option<&Context>,
+    py: Python<'_>,
     item: &Bound<'_, PyAny>,
-    nodeid: &str,
 ) -> PyResult<Option<AsyncioLoopScope>> {
     let marker = item.call_method1("get_closest_marker", ("asyncio",))?;
-    let live = PyList::empty(item.py());
+    let live = PyList::empty(py);
     if !marker.is_none() {
         live.append(marker)?;
     }
-    test_scope(context, nodeid, &live, None)
+    test_scope(context, py, &live)
 }
 
 pub(super) fn unhandled_test(py: Python<'_>) -> PyResult<()> {
@@ -316,10 +277,9 @@ pub(super) fn fixture_plan(
     Ok((execution, loop_scope))
 }
 
-fn test_requirement(
+pub(super) fn test_requirement(
     context: Option<&Context>,
     callable: &Bound<'_, PyAny>,
-    nodeid: &str,
     marks: &Bound<'_, PyList>,
 ) -> PyResult<Option<AsyncioLoopScope>> {
     if !enabled(context, callable.py())? {
@@ -329,7 +289,7 @@ fn test_requirement(
         classify(callable)?,
         FixtureExecution::AsyncCoroutine | FixtureExecution::AsyncGenerator
     ) {
-        test_scope(context, nodeid, marks, None)
+        test_scope(context, callable.py(), marks)
     } else {
         Ok(None)
     }
@@ -369,25 +329,23 @@ impl super::Collector<'_> {
     pub(super) fn asyncio_test_plan(
         &self,
         callable: &Bound<'_, PyAny>,
-        nodeid: &str,
+        name: &str,
         marks: &Bound<'_, PyList>,
         own_mark_count: usize,
     ) -> PyResult<(Option<AsyncioLoopScope>, usize)> {
-        let scope = test_requirement(self.context.as_ref(), callable, nodeid, marks)?;
-        let added = mark_async_generator(callable, nodeid, scope, marks, own_mark_count)?;
+        let scope = test_requirement(self.context.as_ref(), callable, marks)?;
+        let added = mark_async_generator(callable, name, scope, marks, own_mark_count)?;
         Ok((scope, own_mark_count + added))
     }
 
     pub(super) fn asyncio_roots(
         &self,
-        generation: &ParameterGeneration<'_, '_>,
+        callable: &Bound<'_, PyAny>,
         marks: &Bound<'_, PyList>,
         rows: &[ParameterRow],
         function_mark_count: usize,
         roots: &mut Vec<String>,
     ) -> PyResult<()> {
-        let callable = generation.callable;
-        let nodeid = generation.nodeid;
         if !enabled(self.context.as_ref(), callable.py())? {
             return Ok(());
         }
@@ -398,23 +356,12 @@ impl super::Collector<'_> {
             return Ok(());
         }
         for row in rows {
-            let scope = if row.marks.is_empty() {
-                test_scope(self.context.as_ref(), nodeid, marks, None)?
-            } else {
-                let planning_marks = PyList::new(callable.py(), marks.iter())?;
-                for (offset, mark) in row.marks.iter().enumerate() {
-                    planning_marks
-                        .insert(function_mark_count + offset, mark.bind(callable.py()))?;
-                }
-                let indices = function_mark_count..function_mark_count + row.marks.len();
-                test_scope(
-                    self.context.as_ref(),
-                    nodeid,
-                    &planning_marks,
-                    Some((&row.suffix, indices)),
-                )?
-            };
-            if let Some(scope) = scope {
+            let planning_marks = PyList::new(callable.py(), marks.iter())?;
+            for (offset, mark) in row.marks.iter().enumerate() {
+                planning_marks.insert(function_mark_count + offset, mark.bind(callable.py()))?;
+            }
+            if let Some(scope) = test_scope(self.context.as_ref(), callable.py(), &planning_marks)?
+            {
                 let name = runner_name(scope);
                 if !roots.contains(&name) {
                     roots.push(name);
