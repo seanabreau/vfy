@@ -21,7 +21,7 @@ older, and PyPy, are unsupported.
 | `vfy test --engine=pytest-native` | Experimental; Linux and macOS; stable pytest `>=9.1` | Explicit compatibility route; worker and watch boundary tests |
 | pluggy | `>=1.5,<2` with `vfy[pytest]` | CI floor: 1.5.0 with pytest 9.1.0; locked reference: 1.6.0 |
 | Hypothesis | Optional; final 6.x releases from 6.152.1 for independent execution | Locked reference: 6.170.5 |
-| pytest-xdist | Optional; native execution supports 3.8.0 | Direct pytest minimum lane: 3.6.1; native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, xdist 3.8.0 loses the group suffix used by `--dist=loadgroup` |
+| pytest-xdist | Optional, stable `>=3.6.1,<3.9` with `--engine=pytest-native` | Direct pytest and native minimum lane: 3.6.1; locked native scheduler, worker, report, and coverage differentials: 3.8.0. With pytest 9.2.0, xdist 3.8.0 loses the group suffix used by `--dist=loadgroup` |
 | pytest-cov | `>=7.1,<8` (integration) | 7.1.0 |
 | pytest-html | `4.2.0` (integration) | 4.2.0 |
 | pytest-metadata | `3.1.1` (integration) | 3.1.1 |
@@ -413,7 +413,8 @@ Hypothesis integration. The independent adapter admits installed versions 1.4.0,
 checks. Direct-pytest coverage integration requires pytest-xdist 3.6.1 or newer;
 upstream withdrew 3.6.0 for a
 [pytest-cov regression](https://pytest-xdist.readthedocs.io/en/latest/changelog.html#pytest-xdist-3-6-0-2024-04-19).
-Native xdist execution targets 3.8.0. Performance has
+The pytest-native engine supports stable pytest-xdist releases from 3.6.1
+through the 3.8 series and checks the installed worker and scheduler protocol. Performance has
 [separate gates](benchmarks.md#how-to-read-benchmark-evidence).
 
 The owned adapter acquires event-loop policies on demand. A pytest-asyncio

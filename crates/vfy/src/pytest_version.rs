@@ -16,6 +16,7 @@ enum SupportedPlugin {
     RandomOrder,
     Randomly,
     Timeout,
+    Xdist,
 }
 
 impl SupportedPlugin {
@@ -29,6 +30,7 @@ impl SupportedPlugin {
             Self::RandomOrder => (Version::new([1, 1]), Version::new([2])),
             Self::Randomly => (Version::new([5]), Version::new([6])),
             Self::Timeout => (Version::new([2, 4]), Version::new([2, 5])),
+            Self::Xdist => (Version::new([3, 6, 1]), Version::new([3, 9])),
         };
         VersionSpecifier::greater_than_equal_version(minimum).contains(version)
             && VersionSpecifier::less_than_version(maximum).contains(version)
@@ -91,6 +93,7 @@ pub(crate) fn pytest_plugin_version_supported(
         "random-order" => SupportedPlugin::RandomOrder,
         "randomly" => SupportedPlugin::Randomly,
         "timeout" => SupportedPlugin::Timeout,
+        "xdist" => SupportedPlugin::Xdist,
         _ => {
             return Err(PyValueError::new_err(format!(
                 "unknown pytest plugin {plugin:?}"

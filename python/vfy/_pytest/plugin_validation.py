@@ -60,7 +60,7 @@ from .xdist_cache import XdistCacheReporter
 from .xdist_support import (
     XDIST_CONFTEST_HOOKS,
     XDIST_PLUGIN_NAMES,
-    XDIST_VERSION,
+    XDIST_VERSION_RANGE,
     is_native_xdist,
     is_serial_xdist,
     trusted_xdist_plugin,
@@ -420,8 +420,8 @@ def _validated_xdist_plugin(plugin: object, plugin_name: str) -> bool:
         return False
     if not xdist_supported_version():
         raise UnsupportedExtensionError(
-            f"native pytest supports pytest-xdist=={XDIST_VERSION}; "
-            "install that version or run this workflow with pytest"
+            f"native pytest supports stable pytest-xdist{XDIST_VERSION_RANGE}. "
+            "Install a supported version or run this workflow with --engine=pytest"
         )
     raise UnsupportedExtensionError(
         f"native pytest requires the installed upstream xdist plugin: {plugin_name!r}"

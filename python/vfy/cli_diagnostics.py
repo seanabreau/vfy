@@ -332,7 +332,7 @@ def _diagnostics_pytest_conflicts(
     )
     from ._pytest.xdist_support import (  # noqa: PLC0415 - inspect optional xdist for diagnostics
         XDIST_PLUGIN_NAMES,
-        XDIST_VERSION,
+        XDIST_VERSION_RANGE,
         xdist_requested,
         xdist_supported_version,
     )
@@ -346,12 +346,12 @@ def _diagnostics_pytest_conflicts(
     xdist_conflicts: list[str] = []
     supported_xdist = xdist_supported_version()
     if xdist_requested(all_args, [*plugin_names, *env_plugins]) and not supported_xdist:
-        action = f"install pytest-xdist=={XDIST_VERSION}"
+        action = f"install a stable release matching 'pytest-xdist{XDIST_VERSION_RANGE}'"
         conflicts.append(
             {
                 "kind": "xdist",
                 "source": "resolved pytest addopts or diagnostics arguments",
-                "detail": f"native pytest requires pytest-xdist=={XDIST_VERSION}",
+                "detail": f"native pytest requires stable pytest-xdist{XDIST_VERSION_RANGE}",
                 "action": action,
             }
         )
