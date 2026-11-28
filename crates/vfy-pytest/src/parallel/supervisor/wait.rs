@@ -3,14 +3,14 @@
 use super::ParallelSupervisor;
 use crate::parallel::{
     CollectionRoute, POLL_INTERVAL, ParallelChild, ParallelControl, WorkerCompletionRoute,
-    WorkerExit, WorkerProgress, cancellation, independent, io_error, read_json,
-    replay_worker_stream, worker_exit_code, write_json_atomic,
+    WorkerExit, WorkerProgress, independent, io_error, read_json, replay_worker_stream,
+    worker_exit_code, write_json_atomic,
 };
 use crate::progress::{CaseOrder, Progress};
 use crate::results::worker_declares_exitstatus;
 use pyo3::exceptions::{PyKeyboardInterrupt, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use rustix::process::{Pid, Signal};
+use rustix::process::Pid;
 use std::fs::{self};
 use std::io::{self};
 use std::process::ExitStatus;
@@ -73,7 +73,7 @@ impl ParallelSupervisor<'_> {
         {
             self.parent_interruption =
                 Some(crate::results::ParentInterruption::from_error(py, error));
-            self.interrupt_execution_peers().map_err(io_error)
+            self.interrupt_peers().map_err(io_error)
         } else {
             if !self.cooperative_execution() {
                 self.abort("parent interrupted");
@@ -200,30 +200,13 @@ impl ParallelSupervisor<'_> {
                 })
     }
 
-    fn drain_collection_peers(&mut self, py: Python<'_>, primary: usize) -> PyResult<()> {
+    fn drain_collection_peers(&mut self, py: Python<'_>) -> PyResult<()> {
         self.abort_collection()?;
-        for index in 0..self.process_groups.len() {
-            if index != primary
-                && self.children[index].is_some()
-                && self.process_groups[index].is_some()
-            {
-                match cancellation::signal_group(
-                    &mut self.children[index],
-                    &mut self.process_groups[index],
-                    Signal::INT,
-                ) {
-                    Ok(()) => (),
-                    Err(error)
-                        if error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) => {
-                    }
-                    Err(error) => return Err(io_error(error)),
-                }
-            }
-        }
-        let started = Instant::now();
+        // The primary worker has already been reaped.
+        self.interrupt_peers().map_err(io_error)?;
         while self.children.iter().any(Option::is_some) {
             py.check_signals()?;
-            if started.elapsed() >= crate::parallel::cancellation::DRAIN_TIMEOUT {
+            if self.cancellation.expired(Instant::now()) {
                 return Err(self.abort_error(py, "native collection peers did not complete interrupted cleanup within the drain deadline".to_owned(), Some(3)));
             }
             for index in 0..self.children.len() {
@@ -295,7 +278,7 @@ impl ParallelSupervisor<'_> {
             match validated {
                 independent::ValidatedCompletion::Failure(failure, declared) => {
                     if !self.released && self.children.iter().any(Option::is_some) {
-                        self.drain_collection_peers(py, index)?;
+                        self.drain_collection_peers(py)?;
                     }
                     if self.independent_parallel() && !self.released {
                         // A worker's usage error reaches the controller through its stderr,
@@ -328,7 +311,7 @@ impl ParallelSupervisor<'_> {
                         && self.control_drain.is_none()
                     {
                         self.control_drain = Some(interruption);
-                        self.interrupt_execution_peers().map_err(io_error)?;
+                        self.interrupt_peers().map_err(io_error)?;
                     }
                 }
             }

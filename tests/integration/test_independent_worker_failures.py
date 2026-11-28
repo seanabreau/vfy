@@ -253,3 +253,62 @@ def pytest_unconfigure():
         if path.exists():
             with suppress(ProcessLookupError):
                 os.kill(int(path.read_text()), signal.SIGKILL)
+
+
+@requires_native_pytest
+def test_collection_peer_shutdown_interrupt_preserves_primary_status(tmp_path: Path) -> None:
+    project = VfyProject(tmp_path, timeout=15)
+    project.write(
+        "conftest.py",
+        """import os, select, signal, time
+from pathlib import Path
+import pytest
+
+index = os.environ.get('VFY_NATIVE_PARALLEL_INDEX')
+
+def pytest_configure():
+    if index == '0':
+        signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+    elif index == '1':
+        directory = os.environ.get('VFY_NATIVE_PARALLEL_DIR')
+        if directory is not None:
+            collection = Path(directory) / 'collection.0.json'
+            deadline = time.monotonic() + 5
+            while not collection.is_file():
+                assert time.monotonic() < deadline, 'peer did not publish collection'
+                time.sleep(0.01)
+        pytest.exit('primary requested collection exit', returncode=42)
+
+def pytest_unconfigure():
+    if index != '0':
+        return
+    read, write = os.pipe()
+    os.set_blocking(write, False)
+    previous = signal.set_wakeup_fd(write)
+    try:
+        # Deliver the supervisor's SIGINT after native shutdown defers its callback.
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGINT})
+        ready, _, _ = select.select([read], [], [], 3)
+        assert ready and os.read(read, 1) == bytes([signal.SIGINT])
+        Path('peer-cleanup-finished').touch()
+    finally:
+        signal.set_wakeup_fd(previous)
+        os.close(read)
+        os.close(write)
+""",
+    )
+    for name in ["test_a.py", "test_b.py"]:
+        project.write(name, "def test_body():\n    raise AssertionError('body must not run')\n")
+    stock = project.run_python("-m", "pytest", "-q", env={"VFY_NATIVE_PARALLEL_INDEX": "1"})
+    stock.expect(42)
+    candidate = project.run_vfy(
+        "test",
+        "--engine=native",
+        "--no-cov",
+        "--workers=2",
+        "--native-result-json=result.json",
+        env={"VFY_WORKER_START": "exec"},
+    )
+    assert (tmp_path / "peer-cleanup-finished").is_file(), candidate.stdout + candidate.stderr
+    candidate.expect(stock.returncode)
+    assert not (tmp_path / "result.json").exists()
