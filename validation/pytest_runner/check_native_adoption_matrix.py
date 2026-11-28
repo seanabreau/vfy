@@ -107,7 +107,9 @@ SIMPLE_PROJECTS = (
         "6abdcf6ca167f5d61297b5d86e22f3dd058031b3",
         "src",
         ("testing",),
-        ("--cov=pluggy",),
+        # Pluggy's strict warning policy rejects the include-ignored warning
+        # from overriding its [run] include with an explicit source.
+        ("--cov",),
     ),
     Project(
         "packaging",
