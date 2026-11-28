@@ -806,11 +806,40 @@ fn tree_identity_digests(
     ignored: &[PathBuf],
     mode: TreeIdentityMode,
 ) -> std::io::Result<TreeIdentityDigests> {
-    let mut digests = TreeIdentityDigests::new(mode);
-    for root in normalized_roots(roots) {
-        hash_tree(&root, &root, ignored, &mut digests)?;
+    let roots = normalized_roots(roots);
+    capture_tree_identity(mode, |digests| {
+        for root in &roots {
+            hash_tree(root, root, ignored, digests)?;
+        }
+        Ok(())
+    })
+}
+
+fn capture_tree_identity(
+    mode: TreeIdentityMode,
+    mut hash: impl FnMut(&mut TreeIdentityDigests) -> io::Result<()>,
+) -> io::Result<TreeIdentityDigests> {
+    let mut retries = 2;
+    loop {
+        let mut digests = TreeIdentityDigests::new(mode);
+        match hash(&mut digests) {
+            Ok(()) => return Ok(digests),
+            // An edit can remove or replace an entry between metadata lookup
+            // and reading it. Start a fresh scan to discard partial digests.
+            Err(error)
+                if retries > 0
+                    && matches!(
+                        error.kind(),
+                        io::ErrorKind::NotFound
+                            | io::ErrorKind::NotADirectory
+                            | io::ErrorKind::IsADirectory
+                    ) =>
+            {
+                retries -= 1;
+            }
+            Err(error) => return Err(error),
+        }
     }
-    Ok(digests)
 }
 
 fn digest_hex(digest: Option<Sha256>) -> std::io::Result<String> {
