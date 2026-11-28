@@ -1,6 +1,6 @@
 //! Async discovery and scoped runner requirements share the native fixture plan.
 use super::lifecycle::Context;
-use super::parameters::ParameterRow;
+use super::parameters::{ParameterGeneration, ParameterRow};
 use super::plugins::ASYNCIO_PLUGIN;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -380,13 +380,14 @@ impl super::Collector<'_> {
 
     pub(super) fn asyncio_roots(
         &self,
-        callable: &Bound<'_, PyAny>,
-        nodeid: &str,
+        generation: &ParameterGeneration<'_, '_>,
         marks: &Bound<'_, PyList>,
         rows: &[ParameterRow],
         function_mark_count: usize,
         roots: &mut Vec<String>,
     ) -> PyResult<()> {
+        let callable = generation.callable;
+        let nodeid = generation.nodeid;
         if !enabled(self.context.as_ref(), callable.py())? {
             return Ok(());
         }

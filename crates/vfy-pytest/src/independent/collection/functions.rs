@@ -221,14 +221,7 @@ impl<'py> Collector<'py> {
             marker_count,
         };
         let rows = parameter_rows(&generation, &marks)?;
-        self.asyncio_roots(
-            callable,
-            &definition_plan.nodeid,
-            &marks,
-            &rows,
-            function_mark_count,
-            &mut roots,
-        )?;
+        self.asyncio_roots(&generation, &marks, &rows, function_mark_count, &mut roots)?;
         let rows = expand_fixture_rows(
             &generation,
             rows,
